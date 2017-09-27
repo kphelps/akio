@@ -12,6 +12,7 @@ mod context;
 mod mailbox;
 
 pub use actor::Actor;
+pub use actor::BaseActor;
 use actor_cell::ActorCell;
 use actor_cell::ActorCellHandle;
 use actor_cell::BaseActorCell;

@@ -1,4 +1,4 @@
-use super::{Actor, ActorCell, ActorRef, ActorSupervisor, BaseActorCell};
+use super::{BaseActor, ActorCell, ActorRef, ActorSupervisor, BaseActorCell};
 use futures::prelude::*;
 use futures::sync::mpsc;
 use std::collections::HashMap;
@@ -60,9 +60,8 @@ impl ActorSystemInner {
 }
 
 impl ActorSupervisor for ActorSystem {
-    fn spawn<A, T>(&mut self, id: Uuid, actor: A) -> Option<ActorRef<T>>
-        where A: Actor<T> + 'static,
-              T: Clone + 'static
+    fn spawn<A>(&mut self, id: Uuid, actor: A) -> Option<ActorRef>
+        where A: BaseActor + 'static
     {
         let actor_cell = ActorCell::new(id, actor, self.enqueuer.clone(), self.core.remote());
         let actor_ref = actor_cell.actor_ref();

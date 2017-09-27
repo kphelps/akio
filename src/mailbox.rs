@@ -1,23 +1,26 @@
+use super::ActorRef;
+use std::any::Any;
 use std::collections::VecDeque;
 
-pub enum MailboxMessage<T> {
-    User(T),
+pub enum MailboxMessage {
+    User(Box<Any>, ActorRef),
 }
 
-pub struct Mailbox<T> {
-    messages: VecDeque<MailboxMessage<T>>,
+pub struct Mailbox {
+    messages: VecDeque<MailboxMessage>,
 }
 
-impl<T> Mailbox<T> {
+impl Mailbox {
     pub fn new() -> Self {
         Self { messages: VecDeque::new() }
     }
 
-    pub fn push(&mut self, message: T) {
-        self.messages.push_back(MailboxMessage::User(message))
+    pub fn push(&mut self, message: Box<Any>, sender: ActorRef) {
+        self.messages
+            .push_back(MailboxMessage::User(message, sender))
     }
 
-    pub fn pop(&mut self) -> Option<MailboxMessage<T>> {
+    pub fn pop(&mut self) -> Option<MailboxMessage> {
         self.messages.pop_front()
     }
 }
