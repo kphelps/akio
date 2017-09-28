@@ -2,39 +2,34 @@ extern crate akio;
 extern crate uuid;
 
 use akio::*;
+use std::iter;
 use uuid::Uuid;
 
-struct PongActor {
-    count: u64,
-}
+struct PongActor {}
 
 struct PingActor {
     other: ActorRef,
 }
 
 impl Actor for PongActor {
-    type Message = String;
+    type Message = ();
 
-    fn handle_message(&mut self, context: &ActorContext, message: String) {
-        if self.count % 10000 == 0 {
-            println!("ping {}", self.count);
-        }
-        self.count += 1;
-        context.sender.send(message, &context.self_ref);
+    fn handle_message(&mut self, context: &ActorContext, _message: ()) {
+        context.sender.send(());
     }
 }
 
 impl PongActor {
     pub fn new() -> Self {
-        Self { count: 0 }
+        Self {}
     }
 }
 
 impl Actor for PingActor {
-    type Message = String;
+    type Message = ();
 
-    fn handle_message(&mut self, context: &ActorContext, message: String) {
-        self.other.send(message, &context.self_ref);
+    fn handle_message(&mut self, context: &ActorContext, _message: ()) {
+        self.other.send(());
     }
 }
 
@@ -44,12 +39,18 @@ impl PingActor {
     }
 }
 
-pub fn main() {
-    let mut system = ActorSystem::new();
+fn spawn_ping_loop(system: &mut ActorSystem) {
     let pong_ref = system.spawn(Uuid::new_v4(), PongActor::new()).unwrap();
     let ping_ref = system
         .spawn(Uuid::new_v4(), PingActor::new(pong_ref.clone()))
         .unwrap();
-    ping_ref.send("ping".to_string(), &pong_ref);
+    ping_ref.send_from((), &pong_ref);
+}
+
+pub fn main() {
+    let mut system = ActorSystem::new();
+    iter::repeat(1000)
+        .take(1)
+        .for_each(|_| { spawn_ping_loop(&mut system); });
     system.start();
 }

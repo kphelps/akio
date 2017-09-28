@@ -3,7 +3,7 @@ use std::any::Any;
 use std::collections::VecDeque;
 
 pub enum MailboxMessage {
-    User(Box<Any>, ActorRef),
+    User(Box<Any + Send>, ActorRef),
 }
 
 pub struct Mailbox {
@@ -15,7 +15,7 @@ impl Mailbox {
         Self { messages: VecDeque::new() }
     }
 
-    pub fn push(&mut self, message: Box<Any>, sender: ActorRef) {
+    pub fn push(&mut self, message: Box<Any + Send>, sender: ActorRef) {
         self.messages
             .push_back(MailboxMessage::User(message, sender))
     }

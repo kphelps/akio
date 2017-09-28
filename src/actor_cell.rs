@@ -3,17 +3,12 @@ use futures::future::Executor;
 use futures::prelude::*;
 use futures::sync::mpsc;
 use std::any::Any;
-use std::cell::RefCell;
-use std::rc::{Rc, Weak};
+use std::sync::{Arc, Mutex};
 use tokio_core::reactor::Remote;
 use uuid::Uuid;
 
-pub trait BaseActorCell {
-    fn process_message(&mut self);
-}
-
 pub struct ActorCell {
-    inner: Rc<RefCell<ActorCellInner>>,
+    inner: Arc<Mutex<ActorCellInner>>,
     context: ActorContext,
     actor: Box<BaseActor>,
 }
@@ -27,7 +22,7 @@ pub struct ActorCellInner {
 
 #[derive(Clone)]
 pub struct ActorCellHandle {
-    inner: Weak<RefCell<ActorCellInner>>,
+    inner: Arc<Mutex<ActorCellInner>>,
 }
 
 impl ActorCell {
@@ -44,8 +39,8 @@ impl ActorCell {
             enqueuer: enqueuer.clone(),
             remote_handle: remote_handle.clone(),
         };
-        let p_inner = Rc::new(RefCell::new(inner));
-        let handle = ActorCellHandle { inner: Rc::downgrade(&p_inner) };
+        let p_inner = Arc::new(Mutex::new(inner));
+        let handle = ActorCellHandle { inner: p_inner.clone() };
         let actor_ref = ActorRef::new(handle);
         Self {
             inner: p_inner,
@@ -54,13 +49,33 @@ impl ActorCell {
         }
     }
 
+    pub fn id(&self) -> Uuid {
+        self.inner.lock().unwrap().id.clone()
+    }
+
     pub fn actor_ref(&self) -> ActorRef {
         self.context.self_ref.clone()
+    }
+
+    fn process_message(&mut self, message: MailboxMessage) {
+        match message {
+            MailboxMessage::User(inner, sender) => {
+                self.context.sender = sender;
+                self.actor.handle_any(&self.context, inner);
+            }
+        };
+    }
+
+    pub fn process_messages(&mut self, max_count: usize) {
+        let messages = self.inner.lock().unwrap().next_batch_to_process(max_count);
+        messages
+            .into_iter()
+            .for_each(|message| self.process_message(message));
     }
 }
 
 impl ActorCellInner {
-    pub fn enqueue_message(&mut self, message: Box<Any>, sender: ActorRef) {
+    pub fn enqueue_message(&mut self, message: Box<Any + Send>, sender: ActorRef) {
         self.mailbox.push(message, sender);
         let f = self.enqueuer
             .clone()
@@ -73,26 +88,21 @@ impl ActorCellInner {
     pub fn next_to_process(&mut self) -> Option<MailboxMessage> {
         self.mailbox.pop()
     }
-}
 
-impl BaseActorCell for ActorCell {
-    fn process_message(&mut self) {
-        let message = self.inner
-            .borrow_mut()
-            .next_to_process()
-            .expect("mailbox is empty");
-        match message {
-            MailboxMessage::User(inner, sender) => {
-                self.context.sender = sender;
-                self.actor.handle_any(&self.context, inner);
+    pub fn next_batch_to_process(&mut self, count: usize) -> Vec<MailboxMessage> {
+        let mut v = Vec::with_capacity(count);
+        for _ in 0..count {
+            match self.next_to_process() {
+                Some(message) => v.push(message),
+                None => return v,
             }
-        };
+        }
+        v
     }
 }
 
 impl ActorCellHandle {
-    pub fn enqueue_message(&self, message: Box<Any>, sender: ActorRef) {
-        let inner = self.inner.upgrade().expect("Failed to enqueue");
-        inner.borrow_mut().enqueue_message(message, sender);
+    pub fn enqueue_message(&self, message: Box<Any + Send>, sender: ActorRef) {
+        self.inner.lock().unwrap().enqueue_message(message, sender);
     }
 }

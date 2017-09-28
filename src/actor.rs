@@ -1,8 +1,8 @@
 use std::any::Any;
 use super::ActorContext;
 
-pub trait BaseActor {
-    fn handle_any(&mut self, context: &ActorContext, message: Box<Any>);
+pub trait BaseActor: Send {
+    fn handle_any(&mut self, context: &ActorContext, message: Box<Any + Send>);
 }
 
 pub trait Actor {
@@ -12,9 +12,9 @@ pub trait Actor {
 }
 
 impl<T> BaseActor for T
-    where T: Actor
+    where T: Actor + Send
 {
-    fn handle_any(&mut self, context: &ActorContext, any_message: Box<Any>) {
+    fn handle_any(&mut self, context: &ActorContext, any_message: Box<Any + Send>) {
         match any_message.downcast() {
             Ok(message) => self.handle_message(context, *message),
             _ => println!("Unhandled message"),

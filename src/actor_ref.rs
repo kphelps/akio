@@ -11,11 +11,11 @@ impl ActorRef {
         Self { handle: handle }
     }
 
-    pub fn send<T: Any>(&self, message: T, sender: &ActorRef) {
+    pub fn send<T: Any + Send>(&self, message: T, sender: &ActorRef) {
         self.send_any(Box::new(message), sender)
     }
 
-    pub fn send_any(&self, message: Box<Any>, sender: &ActorRef) {
+    pub fn send_any(&self, message: Box<Any + Send>, sender: &ActorRef) {
         self.handle.enqueue_message(message, sender.clone())
     }
 }

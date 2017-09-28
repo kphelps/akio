@@ -6,8 +6,6 @@ use tokio_core::reactor::Remote;
 pub struct ActorContext {
     pub self_ref: ActorRef,
     pub enqueuer: mpsc::Sender<ActorEvent>,
-    // TODO: This should probably be just a Handle if actors are only assigned
-    // to a signle thread.
     pub remote_handle: Remote,
     pub sender: ActorRef,
 }
