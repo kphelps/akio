@@ -1,7 +1,10 @@
 extern crate akio;
+extern crate futures;
 extern crate uuid;
 
 use akio::*;
+use futures::Future;
+use futures::future::Executor;
 use std::iter;
 use uuid::Uuid;
 
@@ -38,15 +41,18 @@ impl PingActor {
 }
 
 fn spawn_ping_loop(system: &mut ActorSystem) {
-    let pong_ref = system.spawn(Uuid::new_v4(), PongActor::new()).unwrap();
-    let ping_ref = system.spawn(Uuid::new_v4(), PingActor::new()).unwrap();
-    ping_ref.send((), &pong_ref);
+    let pong_f = system.spawn(Uuid::new_v4(), PongActor::new());
+    let ping_f = system.spawn(Uuid::new_v4(), PingActor::new());
+    let joint = pong_f.join(ping_f);
+    system
+        .execute(joint.map(|(pong_ref, ping_ref)| ping_ref.send((), &pong_ref)))
+        .unwrap();
 }
 
 pub fn main() {
     let mut system = ActorSystem::new();
     iter::repeat(())
-        .take(100000)
+        .take(1000)
         .for_each(|_| { spawn_ping_loop(&mut system); });
     system.start();
 }

@@ -1,12 +1,13 @@
-use super::{BaseActor, ActorCell, ActorRef, ActorSupervisor, Dispatcher};
-use futures::future::Executor;
+use super::{ActorCell, ActorChildren, ActorFactory, ActorRef, ActorSupervisor, BaseActor,
+            Dispatcher};
+use futures::future::{Executor, ExecuteError};
 use futures::prelude::*;
 use futures::sync::mpsc;
 use std::collections::HashMap;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Instant;
-use tokio_core::reactor::{Core, Handle};
+use tokio_core::reactor::{Core, Handle, Remote};
 use uuid::Uuid;
 
 pub enum ActorEvent {
@@ -24,6 +25,7 @@ pub struct ActorSystem {
     inner: Rc<RefCell<ActorSystemInner>>,
     enqueuer: mpsc::Sender<ActorEvent>,
     event_queue: mpsc::Receiver<ActorEvent>,
+    actor_children: ActorChildren,
 }
 
 struct ActorSystemInner {
@@ -50,6 +52,7 @@ impl ActorSystem {
             inner: Rc::new(RefCell::new(inner)),
             enqueuer: sender,
             event_queue: receiver,
+            actor_children: ActorChildren::new(),
         }
     }
 
@@ -73,15 +76,17 @@ impl ActorSystemInner {
     fn handle_event(&mut self, event: ActorEvent) {
         match event {
             ActorEvent::MailboxReady(id) => self.dispatch(&id),
-            ActorEvent::ActorIdle(actor_cell) => {
-                match self.actors
-                          .insert(actor_cell.id(), ActorStatus::Idle(actor_cell)) {
-                    Some(ActorStatus::Idle(_)) => panic!("Idle actor replacing actor??"),
-                    Some(ActorStatus::Scheduled()) => (),
-                    None => panic!("Attempting to idle non existant actor?"),
-                }
-            }
+            ActorEvent::ActorIdle(actor_cell) => self.undispatch(actor_cell),
         };
+    }
+
+    fn undispatch(&mut self, actor_cell: ActorCell) {
+        match self.actors
+                  .insert(actor_cell.id(), ActorStatus::Idle(actor_cell)) {
+            Some(ActorStatus::Idle(_)) => panic!("Idle actor replacing actor??"),
+            Some(ActorStatus::Scheduled()) => (),
+            None => (),
+        }
     }
 
     fn dispatch(&mut self, id: &Uuid) {
@@ -112,21 +117,25 @@ impl ActorSystemInner {
     }
 }
 
-impl ActorSupervisor for ActorSystem {
-    fn spawn<A>(&mut self, id: Uuid, actor: A) -> Option<ActorRef>
-        where A: BaseActor + 'static
-    {
-        let actor_cell = ActorCell::new(id, actor, self.enqueuer.clone(), self.core.remote());
-        let actor_ref = actor_cell.actor_ref();
-        if self.inner
-               .borrow_mut()
-               .actors
-               .insert(id, ActorStatus::Idle(actor_cell))
-               .is_some() {
-            None
-        } else {
-            Some(actor_ref)
-        }
+impl ActorFactory for ActorSystem {
+    fn children(&mut self) -> &mut ActorChildren {
+        &mut self.actor_children
+    }
+
+    fn remote(&self) -> Remote {
+        self.core.remote()
+    }
+
+    fn enqueuer(&self) -> mpsc::Sender<ActorEvent> {
+        self.enqueuer.clone()
+    }
+}
+
+impl<F> Executor<F> for ActorSystem
+    where F: Future<Item = (), Error = ()> + 'static
+{
+    fn execute(&self, future: F) -> Result<(), ExecuteError<F>> {
+        self.core.execute(future)
     }
 }
 
