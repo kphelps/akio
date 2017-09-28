@@ -1,6 +1,7 @@
 use super::{ActorEvent, ActorRef};
 use futures::sync::mpsc;
 use futures::future::{Executor, Future, ExecuteError};
+use std::any::Any;
 use tokio_core::reactor::Remote;
 
 pub struct ActorContext {
@@ -21,6 +22,10 @@ impl ActorContext {
             remote_handle: remote_handle,
             sender: self_ref,
         }
+    }
+
+    pub fn reply<T: Any + Send>(&self, message: T) {
+        self.sender.send(message, &self.self_ref)
     }
 }
 

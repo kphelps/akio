@@ -7,15 +7,13 @@ use uuid::Uuid;
 
 struct PongActor {}
 
-struct PingActor {
-    other: ActorRef,
-}
+struct PingActor {}
 
 impl Actor for PongActor {
     type Message = ();
 
     fn handle_message(&mut self, context: &ActorContext, _message: ()) {
-        context.sender.send(());
+        context.reply(())
     }
 }
 
@@ -29,22 +27,20 @@ impl Actor for PingActor {
     type Message = ();
 
     fn handle_message(&mut self, context: &ActorContext, _message: ()) {
-        self.other.send(());
+        context.reply(())
     }
 }
 
 impl PingActor {
-    pub fn new(other: ActorRef) -> Self {
-        Self { other: other }
+    pub fn new() -> Self {
+        Self {}
     }
 }
 
 fn spawn_ping_loop(system: &mut ActorSystem) {
     let pong_ref = system.spawn(Uuid::new_v4(), PongActor::new()).unwrap();
-    let ping_ref = system
-        .spawn(Uuid::new_v4(), PingActor::new(pong_ref.clone()))
-        .unwrap();
-    ping_ref.send_from((), &pong_ref);
+    let ping_ref = system.spawn(Uuid::new_v4(), PingActor::new()).unwrap();
+    ping_ref.send((), &pong_ref);
 }
 
 pub fn main() {
