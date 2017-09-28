@@ -45,8 +45,8 @@ fn spawn_ping_loop(system: &mut ActorSystem) {
 
 pub fn main() {
     let mut system = ActorSystem::new();
-    iter::repeat(1000)
-        .take(1)
+    iter::repeat(())
+        .take(100000)
         .for_each(|_| { spawn_ping_loop(&mut system); });
     system.start();
 }

@@ -1,5 +1,10 @@
-use super::{ActorCell, ActorEvent};
+#[cfg(target_os = "linux")]
+use core_affinity;
+
+#[cfg(not(target_os = "linux"))]
 use num_cpus;
+
+use super::{ActorCell, ActorEvent};
 use futures::prelude::*;
 use futures::sync::mpsc;
 use std::iter;
@@ -55,14 +60,37 @@ impl Dispatcher {
                      .map_err(|_| ()))
     }
 
+    #[cfg(target_os = "linux")]
     fn create_threads(&self) -> Vec<ThreadHandle> {
-        let cpu_count = num_cpus::get();
+        core_affinity::get_core_ids()
+            .unwrap()
+            .into_iter()
+            .map(|core_id| self.create_thread(core_id))
+            .collect::<Vec<ThreadHandle>>()
+    }
+
+    #[cfg(target_os = "linux")]
+    fn create_thread(&self, core_id: core_affinity::CoreId) -> ThreadHandle {
+        let (sender, receiver) = mpsc::channel(100);
+        let to_system = self.to_system.clone();
+        ThreadHandle {
+            sender: sender,
+            handle: thread::spawn(move || {
+                                      core_affinity::set_for_current(core_id);
+                                      DispatcherThread::new(receiver, to_system).run()
+                                  }),
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn create_threads(&self) -> Vec<ThreadHandle> {
         iter::repeat(())
-            .take(cpu_count)
+            .take(num_cpus::get())
             .map(|_| self.create_thread())
             .collect::<Vec<ThreadHandle>>()
     }
 
+    #[cfg(not(target_os = "linux"))]
     fn create_thread(&self) -> ThreadHandle {
         let (sender, receiver) = mpsc::channel(100);
         let to_system = self.to_system.clone();

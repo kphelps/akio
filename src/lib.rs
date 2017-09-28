@@ -1,4 +1,7 @@
+#[cfg(target_os = "linux")]
+extern crate core_affinity;
 extern crate futures;
+#[cfg(not(target_os = "linux"))]
 extern crate num_cpus;
 extern crate tokio_core;
 extern crate uuid;

@@ -14,6 +14,11 @@ pub enum ActorEvent {
     ActorIdle(ActorCell),
 }
 
+enum ActorStatus {
+    Idle(ActorCell),
+    Scheduled(),
+}
+
 pub struct ActorSystem {
     core: Core,
     inner: Rc<RefCell<ActorSystemInner>>,
@@ -24,7 +29,7 @@ pub struct ActorSystem {
 struct ActorSystemInner {
     start: Instant,
     counter: u64,
-    actors: HashMap<Uuid, ActorCell>,
+    actors: HashMap<Uuid, ActorStatus>,
     dispatcher: Dispatcher,
     handle: Handle,
 }
@@ -69,9 +74,11 @@ impl ActorSystemInner {
         match event {
             ActorEvent::MailboxReady(id) => self.dispatch(&id),
             ActorEvent::ActorIdle(actor_cell) => {
-                match self.actors.insert(actor_cell.id(), actor_cell) {
-                    Some(_) => println!("Idle actor replacing actor??"),
-                    None => (),
+                match self.actors
+                          .insert(actor_cell.id(), ActorStatus::Idle(actor_cell)) {
+                    Some(ActorStatus::Idle(_)) => panic!("Idle actor replacing actor??"),
+                    Some(ActorStatus::Scheduled()) => (),
+                    None => panic!("Attempting to idle non existant actor?"),
                 }
             }
         };
@@ -86,12 +93,13 @@ impl ActorSystemInner {
                 println!("Dispatch {} ({}/s)", self.counter, rate);
             }
         }
-        match self.actors.remove(&id) {
-            Some(actor) => {
+        match self.actors.insert(*id, ActorStatus::Scheduled()) {
+            Some(ActorStatus::Idle(actor)) => {
                 let f = self.dispatcher.dispatch(actor);
                 self.handle.execute(f).expect("Failed to dispatch");
             }
-            None => (),
+            None => panic!("Attempted to schedule a non existant actor"),
+            _ => (),
         }
     }
 
@@ -113,7 +121,7 @@ impl ActorSupervisor for ActorSystem {
         if self.inner
                .borrow_mut()
                .actors
-               .insert(id, actor_cell)
+               .insert(id, ActorStatus::Idle(actor_cell))
                .is_some() {
             None
         } else {
