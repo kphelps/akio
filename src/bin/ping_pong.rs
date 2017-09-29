@@ -15,7 +15,7 @@ struct PingActor {}
 impl Actor for PongActor {
     type Message = ();
 
-    fn handle_message(&mut self, context: &ActorContext, _message: ()) {
+    fn handle_message(&mut self, context: &mut ActorContext, _message: ()) {
         context.reply(())
     }
 }
@@ -29,7 +29,7 @@ impl PongActor {
 impl Actor for PingActor {
     type Message = ();
 
-    fn handle_message(&mut self, context: &ActorContext, _message: ()) {
+    fn handle_message(&mut self, context: &mut ActorContext, _message: ()) {
         context.reply(())
     }
 }

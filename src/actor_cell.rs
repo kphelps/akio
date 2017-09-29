@@ -61,7 +61,7 @@ impl ActorCell {
         match message {
             MailboxMessage::User(inner, sender) => {
                 self.context.sender = sender;
-                self.actor.handle_any(&self.context, inner);
+                self.actor.handle_any(&mut self.context, inner);
             }
         };
     }
