@@ -1,5 +1,4 @@
-use super::{ActorCell, ActorChildren, ActorFactory, ActorRef, ActorSupervisor, BaseActor,
-            Dispatcher};
+use super::{ActorCell, ActorChildren, ActorFactory, Dispatcher};
 use futures::future::{Executor, ExecuteError};
 use futures::prelude::*;
 use futures::sync::mpsc;

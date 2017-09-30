@@ -251,15 +251,10 @@ fn codegen_message_method(message_enum_name: &syn::Ident,
                           -> quote::Tokens {
     let message_name = &message_ast.name;
     let method_name = syn::Ident::from(message_name.as_ref().to_snake_case());
-    let method_with_sender_name = syn::Ident::from(format!("{}_with_sender", method_name.as_ref()));
     let field_args = &message_ast.fields_as_args();
     let field_arg_names = &message_ast.field_names();
     quote! {
-        pub fn #method_name(&self, #(#field_args,)*) {
-            self.#method_with_sender_name(#(#field_arg_names,)* self);
-        }
-
-        pub fn #method_with_sender_name(
+        pub fn #method_name(
             &self,
             #(#field_args,)*
             akio_internal_sender: &ActorRef
