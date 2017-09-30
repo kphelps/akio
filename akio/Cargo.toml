@@ -1,0 +1,16 @@
+[package]
+name = "akio"
+version = "0.1.0"
+authors = ["Kyle Phelps <kphelps@salsify.com>"]
+
+[dependencies]
+akio-syntax = { path = "../akio-syntax" }
+bytes = "0.4"
+core_affinity = "0.4.2"
+futures = "0.1"
+num_cpus = "1.0"
+tokio-io = "0.1"
+tokio-core = "0.1"
+tokio-proto = "0.1"
+tokio-service = "0.1"
+uuid = { version = "0.4", features = ["v4"] }
