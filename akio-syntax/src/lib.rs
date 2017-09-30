@@ -1,4 +1,5 @@
 #![feature(proc_macro)]
+#![recursion_limit="128"]
 
 extern crate inflector;
 extern crate proc_macro;
@@ -52,6 +53,22 @@ impl ActorMessage {
             body: body,
         }
     }
+
+    pub fn fields_as_args(&self) -> Vec<syn::BareFnArg> {
+        self.fields
+            .iter()
+            .map(|field| {
+                     syn::BareFnArg {
+                         name: Some(field.name.clone()),
+                         ty: field.tipe.clone(),
+                     }
+                 })
+            .collect()
+    }
+
+    pub fn field_names(&self) -> Vec<&syn::Ident> {
+        self.fields.iter().map(|field| &field.name).collect()
+    }
 }
 
 #[derive(Debug)]
@@ -70,6 +87,10 @@ impl ActorDefinition {
 
     pub fn message_name(&self) -> syn::Ident {
         syn::Ident::from(format!("{}Message", self.name.as_ref()))
+    }
+
+    pub fn actor_ref_name(&self) -> syn::Ident {
+        syn::Ident::from(format!("{}Ref", self.name.as_ref()))
     }
 }
 
@@ -107,10 +128,12 @@ fn codegen_actor(dsl_ast: &ActorDefinition) -> quote::Tokens {
     let message_enum = codegen_message_enum(dsl_ast);
     let actor_struct = codegen_actor_struct(dsl_ast);
     let actor_impl = codegen_actor_impl(dsl_ast);
+    let actor_ref = codegen_ref(dsl_ast);
     quote!{
         #message_enum
         #actor_struct
         #actor_impl
+        #actor_ref
     }
 }
 
@@ -143,6 +166,7 @@ fn codegen_actor_struct(dsl_ast: &ActorDefinition) -> quote::Tokens {
 fn codegen_actor_impl(dsl_ast: &ActorDefinition) -> quote::Tokens {
     let name = &dsl_ast.name;
     let message_name = dsl_ast.message_name();
+    let actor_ref_name = dsl_ast.actor_ref_name();
     let mod_name = syn::Ident::from(format!("_impl_actor_{}", name.as_ref().to_snake_case()));
     let message_handlers = dsl_ast
         .messages
@@ -150,7 +174,7 @@ fn codegen_actor_impl(dsl_ast: &ActorDefinition) -> quote::Tokens {
         .map(|message| codegen_message_handler(&message_name, message));
     quote!{
         mod #mod_name {
-            use akio::Actor;
+            use akio::{Actor, ActorFactory};
             impl Actor for #name {
                 type Message = #message_name;
 
@@ -158,6 +182,19 @@ fn codegen_actor_impl(dsl_ast: &ActorDefinition) -> quote::Tokens {
                     match message {
                         #(#message_handlers,)*
                     }
+                }
+            }
+
+            impl #name {
+                pub fn spawn<F>(system: &mut F, id: Uuid)
+                    -> Box<Future<Item = #actor_ref_name, Error = ()> + Send>
+                    where F: ActorFactory
+                {
+                    Box::new(system.spawn(id, #name{}).map(|actor_ref| Self::from_ref(&actor_ref)))
+                }
+
+                pub fn from_ref(actor_ref: &ActorRef) -> #actor_ref_name {
+                    #actor_ref_name::new(actor_ref)
                 }
             }
         }
@@ -168,9 +205,69 @@ fn codegen_message_handler(message_enum_name: &syn::Ident,
                            message_ast: &ActorMessage)
                            -> quote::Tokens {
     let message_name = &message_ast.name;
-    let message_field_names = message_ast.fields.iter().map(|field| &field.name);
+    let message_field_names = message_ast.field_names();
     let message_body = &message_ast.body;
     quote! {
         #message_enum_name::#message_name(#(#message_field_names,)*) => #message_body
+    }
+}
+
+fn codegen_ref(dsl_ast: &ActorDefinition) -> quote::Tokens {
+    let name = dsl_ast.actor_ref_name();
+    let mod_name = syn::Ident::from(format!("_impl_actor_ref_{}", name.as_ref().to_snake_case()));
+    let message_methods =
+        dsl_ast
+            .messages
+            .iter()
+            .map(|message| codegen_message_method(&dsl_ast.message_name(), message));
+    quote! {
+        mod #mod_name {
+            use akio::ActorRef;
+            use std::ops::Deref;
+            pub struct #name {
+                inner: ActorRef,
+            }
+            impl #name {
+                pub fn new(actor_ref: &ActorRef) -> Self {
+                    Self {
+                        inner: actor_ref.clone()
+                    }
+                }
+                #(#message_methods)*
+            }
+            impl Deref for #name {
+                type Target = ActorRef;
+                fn deref(&self) -> &Self::Target {
+                    &self.inner
+                }
+            }
+        }
+        pub use #mod_name::#name;
+    }
+}
+
+fn codegen_message_method(message_enum_name: &syn::Ident,
+                          message_ast: &ActorMessage)
+                          -> quote::Tokens {
+    let message_name = &message_ast.name;
+    let method_name = syn::Ident::from(message_name.as_ref().to_snake_case());
+    let method_with_sender_name = syn::Ident::from(format!("{}_with_sender", method_name.as_ref()));
+    let field_args = &message_ast.fields_as_args();
+    let field_arg_names = &message_ast.field_names();
+    quote! {
+        pub fn #method_name(&self, #(#field_args,)*) {
+            self.#method_with_sender_name(#(#field_arg_names,)* self);
+        }
+
+        pub fn #method_with_sender_name(
+            &self,
+            #(#field_args,)*
+            akio_internal_sender: &ActorRef
+        ) {
+            self.inner.send(
+                #message_enum_name::#message_name(#(#field_arg_names,)*),
+                akio_internal_sender
+            );
+        }
     }
 }
