@@ -14,7 +14,7 @@ actor! {
     PongActor,
 
     message Ping() {
-        PingActor::from_ref(&context.sender).pong(context)
+        self.sender::<PingActor>().pong()
     }
 }
 
@@ -22,23 +22,24 @@ actor! {
     PingActor,
 
     message Pong() {
-        PongActor::from_ref(&context.sender).ping(context)
+        self.sender::<PongActor>().ping()
     }
 }
 
-fn spawn_ping_loop(system: &mut ActorSystem) {
-    let pong_f = PongActor::spawn(system, Uuid::new_v4());
-    let ping_f = PingActor::spawn(system, Uuid::new_v4());
+fn spawn_ping_loop() {
+    let pong_f = PongActor::spawn(Uuid::new_v4());
+    let ping_f = PingActor::spawn(Uuid::new_v4());
     let joint = pong_f.join(ping_f);
-    system
-        .execute(joint.map(|(pong_ref, ping_ref)| pong_ref.ping_with_sender(&ping_ref)))
+    context::execute(joint.map(|(pong_ref, ping_ref)| pong_ref.ping_with_sender(&ping_ref)))
         .unwrap();
 }
 
 pub fn main() {
     let mut system = ActorSystem::new();
-    iter::repeat(())
-        .take(1)
-        .for_each(|_| { spawn_ping_loop(&mut system); });
+    system.on_startup(|| {
+                          iter::repeat(())
+                              .take(1)
+                              .for_each(|_| { spawn_ping_loop(); });
+                      });
     system.start();
 }

@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::collections::hash_map;
 use uuid::Uuid;
 
+#[derive(Clone)]
 pub struct ActorChildren {
     actor_refs: HashMap<Uuid, ActorRef>,
 }

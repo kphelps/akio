@@ -1,8 +1,10 @@
-use super::{ActorCell, ActorChildren, ActorFactory, Dispatcher};
+use super::{Actor, ActorCell, ActorChildren, ActorFactory, ActorRef, Dispatcher};
+use super::actor_factory::create_actor;
 use futures::future::{Executor, ExecuteError};
 use futures::prelude::*;
 use futures::sync::mpsc;
 use std::collections::HashMap;
+use std::boxed::FnBox;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Instant;
@@ -24,7 +26,7 @@ pub struct ActorSystem {
     inner: Rc<RefCell<ActorSystemInner>>,
     enqueuer: mpsc::Sender<ActorEvent>,
     event_queue: mpsc::Receiver<ActorEvent>,
-    actor_children: ActorChildren,
+    root_actor: ActorRef,
 }
 
 struct ActorSystemInner {
@@ -46,13 +48,25 @@ impl ActorSystem {
             dispatcher: Dispatcher::new(sender.clone()),
             handle: core.handle(),
         };
+        let (root_actor, root_actor_f) = create_actor(Uuid::new_v4(),
+                                                      GuardianActor {},
+                                                      sender.clone(),
+                                                      core.remote());
+        core.handle().spawn(root_actor_f.map(|_| ()));
         Self {
             core: core,
             inner: Rc::new(RefCell::new(inner)),
             enqueuer: sender,
             event_queue: receiver,
-            actor_children: ActorChildren::new(),
+            root_actor: root_actor,
         }
+    }
+
+    pub fn on_startup<F>(&mut self, f: F)
+        where F: FnBox() + Send + 'static
+    {
+        self.root_actor
+            .send(GuardianMessage::Execute(Box::new(f)), &self.root_actor)
     }
 
     pub fn start(mut self) {
@@ -116,20 +130,6 @@ impl ActorSystemInner {
     }
 }
 
-impl ActorFactory for ActorSystem {
-    fn children(&mut self) -> &mut ActorChildren {
-        &mut self.actor_children
-    }
-
-    fn remote(&self) -> Remote {
-        self.core.remote()
-    }
-
-    fn enqueuer(&self) -> mpsc::Sender<ActorEvent> {
-        self.enqueuer.clone()
-    }
-}
-
 impl<F> Executor<F> for ActorSystem
     where F: Future<Item = (), Error = ()> + 'static
 {
@@ -138,37 +138,18 @@ impl<F> Executor<F> for ActorSystem
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+struct GuardianActor {}
 
-    enum ExampleMessage {
-        Test(),
-    }
+enum GuardianMessage {
+    Execute(Box<FnBox() + Send>),
+}
 
-    struct ExampleActor {}
+impl Actor for GuardianActor {
+    type Message = GuardianMessage;
 
-    impl Actor<ExampleMessage> for ExampleActor {
-        fn handle_message(&mut self, message: ExampleMessage) {
-            match message {
-                ExampleMessage::Test() => (),
-            }
+    fn handle_message(&mut self, message: Self::Message) {
+        match message {
+            GuardianMessage::Execute(f) => f(),
         }
-    }
-
-    #[test]
-    fn test_actor_system() {
-        let mut system = ActorSystem::new();
-        let maybe_ref = system.spawn(Uuid::new_v4(), ExampleActor {});
-        assert!(maybe_ref.is_some());
-    }
-
-    #[test]
-    fn test_actor_system_duplicate_actor_id() {
-        let id = Uuid::new_v4();
-        let mut system = ActorSystem::new();
-        system.spawn(id, ExampleActor {});
-        let maybe_ref = system.spawn(id, ExampleActor {});
-        assert!(maybe_ref.is_none());
     }
 }

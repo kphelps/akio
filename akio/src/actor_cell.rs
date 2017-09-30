@@ -1,4 +1,4 @@
-use super::{ActorContext, ActorEvent, ActorRef, BaseActor, Mailbox, MailboxMessage};
+use super::{ActorContext, ActorEvent, ActorRef, BaseActor, context, Mailbox, MailboxMessage};
 use futures::future::Executor;
 use futures::prelude::*;
 use futures::sync::mpsc;
@@ -60,13 +60,14 @@ impl ActorCell {
     fn process_message(&mut self, message: MailboxMessage) {
         match message {
             MailboxMessage::User(inner, sender) => {
-                self.context.sender = sender;
-                self.actor.handle_any(&mut self.context, inner);
+                context::set_sender(sender);
+                self.actor.handle_any(inner);
             }
         };
     }
 
     pub fn process_messages(&mut self, max_count: usize) {
+        context::set_current_actor(self.context.clone());
         let messages = self.inner.lock().unwrap().next_batch_to_process(max_count);
         messages
             .into_iter()

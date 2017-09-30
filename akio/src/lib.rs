@@ -1,5 +1,8 @@
+#![feature(fnbox)]
+
 #[cfg(target_os = "linux")]
 extern crate core_affinity;
+#[macro_use]
 extern crate futures;
 #[cfg(not(target_os = "linux"))]
 extern crate num_cpus;
@@ -12,12 +15,13 @@ mod actor_factory;
 mod actor_ref;
 mod actor_system;
 mod actor_supervisor;
-mod context;
+pub mod context;
 mod dispatcher;
 mod mailbox;
 
 pub use actor::Actor;
 pub use actor::BaseActor;
+pub use actor::TypedActor;
 use actor_cell::ActorCell;
 use actor_cell::ActorCellHandle;
 pub use actor_factory::ActorFactory;
