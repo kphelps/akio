@@ -175,10 +175,13 @@ fn codegen_actor_impl(dsl_ast: &ActorDefinition) -> quote::Tokens {
     quote!{
         mod #mod_name {
             use akio::{Actor, ActorFactory, context, TypedActor};
+            use futures::prelude::*;
             impl Actor for #name {
                 type Message = #message_name;
 
-                fn handle_message(&mut self, message: Self::Message) {
+                fn handle_message(&mut self, message: Self::Message)
+                    -> Box<Future<Item = (), Error = ()>>
+                {
                     match message {
                         #(#message_handlers,)*
                     }
@@ -226,7 +229,9 @@ fn codegen_message_handler(message_enum_name: &syn::Ident,
     let message_field_names = message_ast.field_names();
     let message_body = &message_ast.body;
     quote! {
-        #message_enum_name::#message_name(#(#message_field_names,)*) => #message_body
+        #message_enum_name::#message_name(#(#message_field_names,)*) => {
+            #message_body
+        }
     }
 }
 

@@ -63,7 +63,7 @@ impl ActorSystem {
     }
 
     pub fn on_startup<F>(&mut self, f: F)
-        where F: FnBox() + Send + 'static
+        where F: FnBox() -> Box<Future<Item = (), Error = ()>> + Send + 'static
     {
         self.root_actor
             .send(GuardianMessage::Execute(Box::new(f)), &self.root_actor)
@@ -141,13 +141,13 @@ impl<F> Executor<F> for ActorSystem
 struct GuardianActor {}
 
 enum GuardianMessage {
-    Execute(Box<FnBox() + Send>),
+    Execute(Box<FnBox() -> Box<Future<Item = (), Error = ()>> + Send>),
 }
 
 impl Actor for GuardianActor {
     type Message = GuardianMessage;
 
-    fn handle_message(&mut self, message: Self::Message) {
+    fn handle_message(&mut self, message: Self::Message) -> Box<Future<Item = (), Error = ()>> {
         match message {
             GuardianMessage::Execute(f) => f(),
         }

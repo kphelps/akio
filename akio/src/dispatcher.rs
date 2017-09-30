@@ -140,11 +140,14 @@ fn handle_message(to_system: mpsc::Sender<ActorEvent>,
                   -> Box<Future<Item = (), Error = ()>> {
     match message {
         ThreadMessage::ProcessActor(mut actor_cell) => {
-            actor_cell.process_messages(10);
-            Box::new(to_system
-                         .send(ActorEvent::ActorIdle(actor_cell))
-                         .map(|_| ())
-                         .map_err(|_| ()))
+            Box::new(actor_cell
+                         .process_messages(10)
+                         .and_then(|_| {
+                                       to_system
+                                           .send(ActorEvent::ActorIdle(actor_cell))
+                                           .map(|_| ())
+                                           .map_err(|_| ())
+                                   }))
         }
     }
 }

@@ -6,7 +6,7 @@ extern crate uuid;
 use akio::*;
 use akio_syntax::*;
 use futures::Future;
-use futures::future::Executor;
+use futures::future;
 use std::iter;
 use uuid::Uuid;
 
@@ -14,7 +14,7 @@ actor! {
     PongActor,
 
     message Ping() {
-        self.sender::<PingActor>().pong()
+        Box::new(future::ok(self.sender::<PingActor>().pong()))
     }
 }
 
@@ -22,24 +22,22 @@ actor! {
     PingActor,
 
     message Pong() {
-        self.sender::<PongActor>().ping()
+        Box::new(future::ok(self.sender::<PongActor>().ping()))
     }
 }
 
-fn spawn_ping_loop() {
+fn spawn_ping_loop() -> Box<Future<Item = (), Error = ()>> {
     let pong_f = PongActor::spawn(Uuid::new_v4());
     let ping_f = PingActor::spawn(Uuid::new_v4());
     let joint = pong_f.join(ping_f);
-    context::execute(joint.map(|(pong_ref, ping_ref)| pong_ref.ping_with_sender(&ping_ref)))
-        .unwrap();
+    Box::new(joint.map(|(pong_ref, ping_ref)| pong_ref.ping_with_sender(&ping_ref)))
 }
 
 pub fn main() {
     let mut system = ActorSystem::new();
-    system.on_startup(|| {
-                          iter::repeat(())
-                              .take(1)
-                              .for_each(|_| { spawn_ping_loop(); });
+    system.on_startup(|| -> Box<Future<Item = (), Error = ()>> {
+                          let fs = iter::repeat(()).take(1).map(|_| spawn_ping_loop());
+                          Box::new(future::join_all(fs).map(|_| ()))
                       });
     system.start();
 }

@@ -1,8 +1,10 @@
 use super::{ActorContext, ActorEvent, ActorRef, BaseActor, context, Mailbox, MailboxMessage};
-use futures::future::Executor;
+use futures::{future, stream};
+use futures::future::{Executor, Loop};
 use futures::prelude::*;
 use futures::sync::mpsc;
 use std::any::Any;
+use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use tokio_core::reactor::Remote;
 use uuid::Uuid;
@@ -57,21 +59,26 @@ impl ActorCell {
         self.context.self_ref.clone()
     }
 
-    fn process_message(&mut self, message: MailboxMessage) {
+    fn process_message(&mut self,
+                       message: MailboxMessage)
+                       -> Box<Future<Item = (), Error = ()> + 'static> {
         match message {
             MailboxMessage::User(inner, sender) => {
                 context::set_sender(sender);
-                self.actor.handle_any(inner);
+                self.actor.handle_any(inner)
             }
-        };
+        }
     }
 
-    pub fn process_messages(&mut self, max_count: usize) {
+    pub fn process_messages(&mut self,
+                            max_count: usize)
+                            -> Box<Future<Item = (), Error = ()> + 'static> {
         context::set_current_actor(self.context.clone());
-        let messages = self.inner.lock().unwrap().next_batch_to_process(max_count);
-        messages
+        let message_batch = self.inner.lock().unwrap().next_batch_to_process(10);
+        let futures = message_batch
             .into_iter()
-            .for_each(|message| self.process_message(message));
+            .map(|message| self.process_message(message));
+        Box::new(stream::futures_ordered(futures).collect().map(|_| ()))
     }
 }
 
@@ -90,11 +97,11 @@ impl ActorCellInner {
         self.mailbox.pop()
     }
 
-    pub fn next_batch_to_process(&mut self, count: usize) -> Vec<MailboxMessage> {
-        let mut v = Vec::with_capacity(count);
+    pub fn next_batch_to_process(&mut self, count: usize) -> VecDeque<MailboxMessage> {
+        let mut v = VecDeque::with_capacity(count);
         for _ in 0..count {
             match self.next_to_process() {
-                Some(message) => v.push(message),
+                Some(message) => v.push_back(message),
                 None => return v,
             }
         }

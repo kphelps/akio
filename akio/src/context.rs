@@ -28,7 +28,6 @@ pub fn execute<F>(f: F) -> Result<(), ExecuteError<F>>
 }
 
 pub fn set_current_actor(context: ActorContext) {
-    println!("Context set");
     CURRENT_ACTOR.with(|ctx| *ctx.borrow_mut() = Some(context))
 }
 
