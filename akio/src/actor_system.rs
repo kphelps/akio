@@ -54,6 +54,7 @@ impl ActorSystem {
     }
 
     pub fn start(&self) {
+        start_deadlock_detector();
         ::std::thread::sleep_ms(1000000);
     }
 
@@ -96,5 +97,34 @@ impl Actor for GuardianActor {
         match message {
             GuardianMessage::Execute(f) => f(),
         }
+    }
+}
+
+
+fn start_deadlock_detector() {
+    {
+        // only for #[cfg]
+        use std::thread;
+        use std::time::Duration;
+        use parking_lot::deadlock;
+
+        // Create a background thread which checks for deadlocks every 10s
+        thread::spawn(move || loop {
+                          println!("Checking");
+                          thread::sleep(Duration::from_secs(10));
+                          let deadlocks = deadlock::check_deadlock();
+                          if deadlocks.is_empty() {
+                              continue;
+                          }
+
+                          println!("{} deadlocks detected", deadlocks.len());
+                          for (i, threads) in deadlocks.iter().enumerate() {
+                              println!("Deadlock #{}", i);
+                              for t in threads {
+                                  println!("Thread Id {:#?}", t.thread_id());
+                                  println!("{:#?}", t.backtrace());
+                              }
+                          }
+                      });
     }
 }

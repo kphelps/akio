@@ -1,11 +1,11 @@
 use super::{ActorContext, ActorRef, ActorSystem, BaseActor, context, Mailbox, MailboxMessage};
 use futures::stream;
 use futures::prelude::*;
-use parking_lot::ReentrantMutex;
+use parking_lot::Mutex;
 use std::any::Any;
 use std::cell::RefCell;
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug)]
@@ -32,12 +32,12 @@ impl ActorStatus {
 
 #[derive(Clone)]
 pub struct ActorCell {
-    inner: Arc<ReentrantMutex<RefCell<ActorCellInner>>>,
+    inner: Arc<Mutex<ActorCellInner>>,
+    mailbox: Arc<Mutex<Mailbox>>,
 }
 
 pub struct ActorCellInner {
     id: Uuid,
-    mailbox: Mailbox,
     status: ActorStatus,
     actor: Box<BaseActor>,
     system: ActorSystem,
@@ -47,15 +47,18 @@ impl ActorCell {
     pub fn new<A>(system: ActorSystem, id: Uuid, actor: A) -> Self
         where A: BaseActor + 'static
     {
+        let mailbox = Arc::new(Mutex::new(Mailbox::new()));
         let inner = ActorCellInner {
             id: id,
-            mailbox: Mailbox::new(),
             status: ActorStatus::Idle,
             actor: Box::new(actor),
             system: system,
         };
-        let p_inner = Arc::new(ReentrantMutex::new(RefCell::new(inner)));
-        let cell = Self { inner: p_inner };
+        let p_inner = Arc::new(Mutex::new(inner));
+        let cell = Self {
+            inner: p_inner,
+            mailbox: mailbox,
+        };
         cell
     }
 
@@ -67,10 +70,9 @@ impl ActorCell {
                             max_count: usize)
                             -> Box<Future<Item = (), Error = ()> + 'static> {
         let self_ref = ActorRef::new(self.clone());
-        let locked_inner = self.inner.lock();
-        let mut inner = locked_inner.borrow_mut();
+        let message_batch = self.next_batch_to_process(max_count);
+        let mut inner = self.inner.lock();
         inner.set_current_actor(self_ref);
-        let message_batch = inner.next_batch_to_process(max_count);
 
         let futures = message_batch
             .into_iter()
@@ -78,17 +80,28 @@ impl ActorCell {
         Box::new(stream::futures_ordered(futures).collect().map(|_| ()))
     }
 
+    pub fn next_batch_to_process(&mut self, count: usize) -> VecDeque<MailboxMessage> {
+        let mut mailbox = self.mailbox.lock();
+        let mut v = VecDeque::with_capacity(count);
+        for _ in 0..count {
+            match mailbox.pop() {
+                Some(message) => v.push_back(message),
+                None => return v,
+            }
+        }
+        v
+    }
+
     pub fn enqueue_message(&self, message: Box<Any + Send>, sender: ActorRef) {
         let me = self.clone();
-        self.with_inner_mut(|inner| {
-                                inner.enqueue_message(message, sender);
-                                inner.dispatch(me);
-                            });
+        self.mailbox.lock().push(message, sender);
+        self.try_with_inner_mut(|inner| { inner.dispatch(me); });
     }
 
     pub fn set_idle_or_dispatch(&mut self) {
         let me = self.clone();
-        self.with_inner_mut(|inner| if inner.mailbox.is_empty() {
+        let mailbox = self.mailbox.lock();
+        self.with_inner_mut(|inner| if mailbox.is_empty() {
                                 inner.set_status(ActorStatus::Idle);
                             } else {
                                 inner.system.dispatch(me)
@@ -96,19 +109,7 @@ impl ActorCell {
     }
 
     pub fn set_idle(&mut self) {
-        println!("Idle");
         self.set_status(ActorStatus::Idle);
-    }
-
-    pub fn set_scheduled(&mut self) -> bool {
-        self.with_inner_mut(|inner| {
-                                if inner.status.is_scheduled() {
-                                    return true;
-                                };
-                                inner.set_status(ActorStatus::Scheduled);
-                                println!("Scheduled");
-                                false
-                            })
     }
 
     fn set_status(&mut self, status: ActorStatus) {
@@ -129,17 +130,23 @@ impl ActorCell {
     fn with_inner<F, R>(&self, f: F) -> R
         where F: FnOnce(&ActorCellInner) -> R
     {
-        let locked = self.inner.lock();
-        let borrowed = locked.borrow();
-        f(&borrowed)
+        let mut inner = self.inner.lock();
+        let x = f(&inner);
+        x
     }
 
     fn with_inner_mut<F, R>(&self, f: F) -> R
         where F: FnOnce(&mut ActorCellInner) -> R
     {
-        let locked = self.inner.lock();
-        let mut borrowed = locked.borrow_mut();
-        f(&mut borrowed)
+        let mut inner = self.inner.lock();
+        let x = f(&mut inner);
+        x
+    }
+
+    fn try_with_inner_mut<F, R>(&self, f: F) -> Option<R>
+        where F: FnOnce(&mut ActorCellInner) -> R
+    {
+        self.inner.try_lock().map(|mut inner| f(&mut inner))
     }
 }
 
@@ -150,9 +157,9 @@ impl ActorCellInner {
 
     pub fn dispatch(&mut self, cell: ActorCell) {
         if self.status.is_scheduled() {
-            println!("Ignored");
             return;
         }
+        self.set_status(ActorStatus::Scheduled);
         self.system.dispatch(cell);
     }
 
@@ -165,25 +172,6 @@ impl ActorCellInner {
                 self.actor.handle_any(inner)
             }
         }
-    }
-
-    pub fn enqueue_message(&mut self, message: Box<Any + Send>, sender: ActorRef) {
-        self.mailbox.push(message, sender);
-    }
-
-    pub fn next_to_process(&mut self) -> Option<MailboxMessage> {
-        self.mailbox.pop()
-    }
-
-    pub fn next_batch_to_process(&mut self, count: usize) -> VecDeque<MailboxMessage> {
-        let mut v = VecDeque::with_capacity(count);
-        for _ in 0..count {
-            match self.next_to_process() {
-                Some(message) => v.push_back(message),
-                None => return v,
-            }
-        }
-        v
     }
 
     pub fn set_status(&mut self, status: ActorStatus) {

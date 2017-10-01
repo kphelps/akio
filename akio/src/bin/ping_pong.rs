@@ -31,13 +31,14 @@ fn spawn_ping_loop() {
     let pong = PongActor::spawn(Uuid::new_v4());
     let ping = PingActor::spawn(Uuid::new_v4());
     pong.ping_with_sender(&ping);
+    pong.ping_with_sender(&ping);
     println!("Exec?");
 }
 
 pub fn main() {
     let mut system = ActorSystem::new();
     system.on_startup(|| -> Box<Future<Item = (), Error = ()>> {
-                          iter::repeat(()).take(64).for_each(|_| spawn_ping_loop());
+                          iter::repeat(()).take(1).for_each(|_| spawn_ping_loop());
                           Box::new(future::ok(()))
                       });
     system.start();
