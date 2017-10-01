@@ -4,12 +4,14 @@ use core_affinity;
 #[cfg(not(target_os = "linux"))]
 use num_cpus;
 
-use super::{ActorCell, ActorEvent, context};
+use super::{ActorCell, context};
+use futures::future::Executor;
 use futures::prelude::*;
 use futures::sync::mpsc;
 use std::iter;
+use std::sync::{Arc, Mutex};
 use std::thread;
-use tokio_core::reactor::Core;
+use tokio_core::reactor::{Core, Remote};
 
 
 enum ThreadMessage {
@@ -19,6 +21,7 @@ enum ThreadMessage {
 struct ThreadHandle {
     sender: mpsc::Sender<ThreadMessage>,
     handle: thread::JoinHandle<()>,
+    remote: Remote,
 }
 
 impl ThreadHandle {
@@ -30,15 +33,13 @@ impl ThreadHandle {
 pub struct Dispatcher {
     handles: Vec<ThreadHandle>,
     thread_i: usize,
-    to_system: mpsc::Sender<ActorEvent>,
 }
 
 impl Dispatcher {
-    pub fn new(to_system: mpsc::Sender<ActorEvent>) -> Self {
+    pub fn new() -> Self {
         Self {
             handles: Vec::new(),
             thread_i: 0,
-            to_system: to_system,
         }
     }
 
@@ -50,14 +51,15 @@ impl Dispatcher {
         self.handles.into_iter().for_each(ThreadHandle::join)
     }
 
-    pub fn dispatch(&mut self, actor: ActorCell) -> Box<Future<Item = (), Error = ()>> {
+    pub fn dispatch(&mut self, actor: ActorCell) {
         let thread_handle = self.next_thread();
-        Box::new(thread_handle
-                     .sender
-                     .clone()
-                     .send(ThreadMessage::ProcessActor(actor))
-                     .map(|_| ())
-                     .map_err(|_| ()))
+        let f = thread_handle
+            .sender
+            .clone()
+            .send(ThreadMessage::ProcessActor(actor))
+            .map(|_| ())
+            .map_err(|_| ());
+        thread_handle.remote.execute(f).unwrap();
     }
 
     #[cfg(target_os = "linux")]
@@ -72,13 +74,11 @@ impl Dispatcher {
     #[cfg(target_os = "linux")]
     fn create_thread(&self, core_id: core_affinity::CoreId) -> ThreadHandle {
         let (sender, receiver) = mpsc::channel(100);
-        let to_system = self.to_system.clone();
+        let (remote, handle) = DispatcherThread::new(receiver).run_with_affinity(core_id);
         ThreadHandle {
             sender: sender,
-            handle: thread::spawn(move || {
-                                      core_affinity::set_for_current(core_id);
-                                      DispatcherThread::new(receiver, to_system).run()
-                                  }),
+            handle: handle,
+            remote: remote,
         }
     }
 
@@ -93,10 +93,11 @@ impl Dispatcher {
     #[cfg(not(target_os = "linux"))]
     fn create_thread(&self) -> ThreadHandle {
         let (sender, receiver) = mpsc::channel(100);
-        let to_system = self.to_system.clone();
+        let (remote, handle) = DispatcherThread::new(receiver).run();
         ThreadHandle {
             sender: sender,
-            handle: thread::spawn(move || DispatcherThread::new(receiver, to_system).run()),
+            handle: handle,
+            remote: remote,
         }
     }
 
@@ -110,44 +111,70 @@ impl Dispatcher {
 
 struct DispatcherThread {
     receiver: mpsc::Receiver<ThreadMessage>,
-    to_system: mpsc::Sender<ActorEvent>,
 }
 
 impl DispatcherThread {
-    pub fn new(receiver: mpsc::Receiver<ThreadMessage>,
-               to_system: mpsc::Sender<ActorEvent>)
-               -> Self {
-        Self {
-            receiver: receiver,
-            to_system: to_system,
-        }
+    pub fn new(receiver: mpsc::Receiver<ThreadMessage>) -> Self {
+        Self { receiver: receiver }
     }
 
-    pub fn run(self) {
-        println!("Starting thread: {:?}", thread::current().id());
-        let to_system = self.to_system;
-        let stream = self.receiver
-            .for_each(|message| handle_message(to_system.clone(), message));
-        let mut core = Core::new().expect("Failed to start dispatcher thread");
-        let handle = core.handle();
-        context::set_thread_context(context::ThreadContext { handle: handle });
-        core.run(stream).expect("Dispatcher failure");
+    pub fn run(self) -> (Remote, thread::JoinHandle<()>) {
+        let arc_remote = Arc::new(Mutex::new(None));
+        let cloned_arc_remote = arc_remote.clone();
+        let handle = thread::spawn(move || {
+            println!("Starting thread: {:?}", thread::current().id());
+            let stream = self.receiver.for_each(|message| handle_message(message));
+            let mut core = Core::new().expect("Failed to start dispatcher thread");
+            let handle = core.handle();
+            *cloned_arc_remote.lock().unwrap() = Some(core.remote());
+            context::set_thread_context(context::ThreadContext { handle: handle });
+            core.run(stream).expect("Dispatcher failure");
+        });
+        // Need to extract the Remote from the new thread
+        loop {
+            if arc_remote.lock().unwrap().is_some() {
+                break;
+            }
+            thread::sleep_ms(10);
+        }
+        let remote = arc_remote.lock().unwrap().as_ref().unwrap().clone();
+        (remote, handle)
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn run_with_affinity(self,
+                             core_id: core_affinity::CoreId)
+                             -> (Remote, thread::JoinHandle<()>) {
+        let arc_remote = Arc::new(Mutex::new(None));
+        let cloned_arc_remote = arc_remote.clone();
+        let handle = thread::spawn(move || {
+            println!("Starting thread: {:?}", thread::current().id());
+            core_affinity::set_for_current(core_id);
+            let stream = self.receiver.for_each(|message| handle_message(message));
+            let mut core = Core::new().expect("Failed to start dispatcher thread");
+            let handle = core.handle();
+            *cloned_arc_remote.lock().unwrap() = Some(core.remote());
+            context::set_thread_context(context::ThreadContext { handle: handle });
+            core.run(stream).expect("Dispatcher failure");
+        });
+        // Need to extract the Remote from the new thread
+        loop {
+            if arc_remote.lock().unwrap().is_some() {
+                break;
+            }
+            thread::sleep_ms(10);
+        }
+        let remote = arc_remote.lock().unwrap().as_ref().unwrap().clone();
+        (remote, handle)
     }
 }
 
-fn handle_message(to_system: mpsc::Sender<ActorEvent>,
-                  message: ThreadMessage)
-                  -> Box<Future<Item = (), Error = ()>> {
+fn handle_message(message: ThreadMessage) -> Box<Future<Item = (), Error = ()>> {
     match message {
         ThreadMessage::ProcessActor(mut actor_cell) => {
             Box::new(actor_cell
                          .process_messages(10)
-                         .and_then(|_| {
-                                       to_system
-                                           .send(ActorEvent::ActorIdle(actor_cell))
-                                           .map(|_| ())
-                                           .map_err(|_| ())
-                                   }))
+                         .map(move |_| { actor_cell.set_idle_or_dispatch(); }))
         }
     }
 }

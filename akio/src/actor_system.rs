@@ -1,109 +1,72 @@
-use super::{Actor, ActorCell, ActorChildren, ActorFactory, ActorRef, context, Dispatcher};
+use super::{Actor, ActorCell, ActorRef, Dispatcher};
 use super::actor_factory::create_actor;
-use futures::future::{Executor, ExecuteError};
 use futures::prelude::*;
-use futures::sync::mpsc;
 use std::collections::HashMap;
 use std::boxed::FnBox;
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use tokio_core::reactor::{Core, Handle, Remote};
 use uuid::Uuid;
 
-pub enum ActorEvent {
-    MailboxReady(Uuid),
-    ActorIdle(ActorCell),
-}
-
-enum ActorStatus {
-    Idle(ActorCell),
-    Scheduled(),
-}
-
+#[derive(Clone)]
 pub struct ActorSystem {
-    core: Core,
-    inner: Rc<RefCell<ActorSystemInner>>,
-    enqueuer: mpsc::Sender<ActorEvent>,
-    event_queue: mpsc::Receiver<ActorEvent>,
-    root_actor: ActorRef,
+    inner: Arc<Mutex<ActorSystemInner>>,
 }
 
 struct ActorSystemInner {
     start: Instant,
     counter: u64,
-    actors: HashMap<Uuid, ActorStatus>,
     dispatcher: Dispatcher,
-    handle: Handle,
+    root_actor: Option<ActorRef>,
 }
 
 impl ActorSystem {
     pub fn new() -> Self {
-        let (sender, receiver) = mpsc::channel(100);
-        let core = Core::new().expect("Failed to create event loop");
-        context::set_thread_context(context::ThreadContext { handle: core.handle() });
+        let mut dispatcher = Dispatcher::new();
+        dispatcher.start();
         let inner = ActorSystemInner {
             start: Instant::now(),
             counter: 0,
-            actors: HashMap::new(),
-            dispatcher: Dispatcher::new(sender.clone()),
-            handle: core.handle(),
+            dispatcher: dispatcher,
+            root_actor: None,
         };
-        let (root_actor, root_actor_f) = create_actor(Uuid::new_v4(),
-                                                      GuardianActor {},
-                                                      sender.clone(),
-                                                      core.remote());
-        core.handle().spawn(root_actor_f.map(|_| ()));
-        Self {
-            core: core,
-            inner: Rc::new(RefCell::new(inner)),
-            enqueuer: sender,
-            event_queue: receiver,
-            root_actor: root_actor,
-        }
+        let system = Self { inner: Arc::new(Mutex::new(inner)) };
+        system.inner.lock().unwrap().root_actor =
+            Some(create_actor(&system, Uuid::new_v4(), GuardianActor {}));
+        system
     }
 
     pub fn on_startup<F>(&mut self, f: F)
         where F: FnBox() -> Box<Future<Item = (), Error = ()>> + Send + 'static
     {
-        self.root_actor
-            .send(GuardianMessage::Execute(Box::new(f)), &self.root_actor)
+        println!("Send");
+        let root_ref = self.root_actor();
+        root_ref.send(GuardianMessage::Execute(Box::new(f)), &root_ref)
     }
 
-    pub fn start(mut self) {
-        let inner = self.inner.clone();
-        let stream = self.event_queue
-            .map(|event| inner.borrow_mut().handle_event(event))
-            .map_err(|_| println!("Err"))
-            .for_each(|_| Ok(()));
-        self.inner.borrow_mut().start_dispatcher();
-        self.core.run(stream).expect("Failure");
-        Rc::try_unwrap(self.inner)
-            .ok()
-            .expect("Failed shutting down system")
-            .into_inner()
-            .join();
+    fn root_actor(&self) -> ActorRef {
+        self.inner
+            .lock()
+            .unwrap()
+            .root_actor
+            .as_ref()
+            .unwrap()
+            .clone()
+    }
+
+    pub fn start(&self) {
+        ::std::thread::sleep_ms(1000000);
+    }
+
+    pub fn dispatch(&mut self, actor: ActorCell) {
+        self.inner
+            .lock()
+            .expect("Failed to dispatch")
+            .dispatch(actor);
     }
 }
 
 impl ActorSystemInner {
-    fn handle_event(&mut self, event: ActorEvent) {
-        match event {
-            ActorEvent::MailboxReady(id) => self.dispatch(&id),
-            ActorEvent::ActorIdle(actor_cell) => self.undispatch(actor_cell),
-        };
-    }
-
-    fn undispatch(&mut self, actor_cell: ActorCell) {
-        match self.actors
-                  .insert(actor_cell.id(), ActorStatus::Idle(actor_cell)) {
-            Some(ActorStatus::Idle(_)) => panic!("Idle actor replacing actor??"),
-            Some(ActorStatus::Scheduled()) => (),
-            None => (),
-        }
-    }
-
-    fn dispatch(&mut self, id: &Uuid) {
+    fn dispatch(&mut self, actor: ActorCell) {
         self.counter += 1;
         if self.counter % 10000 == 0 {
             println!("Counter: {}", self.counter);
@@ -116,30 +79,7 @@ impl ActorSystemInner {
                 ::std::process::exit(0);
             }
         }
-        match self.actors.insert(*id, ActorStatus::Scheduled()) {
-            Some(ActorStatus::Idle(actor)) => {
-                let f = self.dispatcher.dispatch(actor);
-                self.handle.execute(f).expect("Failed to dispatch");
-            }
-            None => panic!("Attempted to schedule a non existant actor"),
-            _ => (),
-        }
-    }
-
-    fn start_dispatcher(&mut self) {
-        self.dispatcher.start();
-    }
-
-    fn join(self) {
-        self.dispatcher.join();
-    }
-}
-
-impl<F> Executor<F> for ActorSystem
-    where F: Future<Item = (), Error = ()> + 'static
-{
-    fn execute(&self, future: F) -> Result<(), ExecuteError<F>> {
-        self.core.execute(future)
+        self.dispatcher.dispatch(actor)
     }
 }
 

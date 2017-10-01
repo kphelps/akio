@@ -6,6 +6,7 @@ extern crate core_affinity;
 extern crate futures;
 #[cfg(not(target_os = "linux"))]
 extern crate num_cpus;
+extern crate parking_lot;
 extern crate tokio_core;
 extern crate uuid;
 
@@ -23,11 +24,9 @@ pub use actor::Actor;
 pub use actor::BaseActor;
 pub use actor::TypedActor;
 use actor_cell::ActorCell;
-use actor_cell::ActorCellHandle;
 pub use actor_factory::ActorFactory;
 pub use actor_factory::ActorChildren;
 pub use actor_ref::ActorRef;
-pub use actor_system::ActorEvent;
 pub use actor_system::ActorSystem;
 pub use actor_supervisor::ActorSupervisor;
 pub use context::ActorContext;

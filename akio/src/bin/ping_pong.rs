@@ -26,18 +26,19 @@ actor! {
     }
 }
 
-fn spawn_ping_loop() -> Box<Future<Item = (), Error = ()>> {
-    let pong_f = PongActor::spawn(Uuid::new_v4());
-    let ping_f = PingActor::spawn(Uuid::new_v4());
-    let joint = pong_f.join(ping_f);
-    Box::new(joint.map(|(pong_ref, ping_ref)| pong_ref.ping_with_sender(&ping_ref)))
+fn spawn_ping_loop() {
+    println!("Exec?");
+    let pong = PongActor::spawn(Uuid::new_v4());
+    let ping = PingActor::spawn(Uuid::new_v4());
+    pong.ping_with_sender(&ping);
+    println!("Exec?");
 }
 
 pub fn main() {
     let mut system = ActorSystem::new();
     system.on_startup(|| -> Box<Future<Item = (), Error = ()>> {
-                          let fs = iter::repeat(()).take(64).map(|_| spawn_ping_loop());
-                          Box::new(future::join_all(fs).map(|_| ()))
+                          iter::repeat(()).take(64).for_each(|_| spawn_ping_loop());
+                          Box::new(future::ok(()))
                       });
     system.start();
 }

@@ -197,15 +197,13 @@ fn codegen_actor_impl(dsl_ast: &ActorDefinition) -> quote::Tokens {
             }
 
             impl #name {
-                pub fn spawn(id: Uuid)
-                    -> Box<Future<Item = #actor_ref_name, Error = ()> + Send>
+                pub fn spawn(id: Uuid) -> #actor_ref_name
                 {
-                    Box::new(
-                        context::with_mut(|ctx| {
-                            ctx.spawn(id, #name{})
-                                .map(|actor_ref| Self::from_ref(&actor_ref))
-                        })
-                    )
+                    context::with_mut(|ctx| {
+                        let system = ctx.system.clone();
+                        let actor_ref = ctx.spawn(&system, id, #name{});
+                        Self::from_ref(&actor_ref)
+                    })
                 }
 
                 pub fn with_children<F, R>(&self, f: F) -> R

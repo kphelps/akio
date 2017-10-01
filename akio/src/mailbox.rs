@@ -15,6 +15,10 @@ impl Mailbox {
         Self { messages: VecDeque::new() }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.messages.is_empty()
+    }
+
     pub fn push(&mut self, message: Box<Any + Send>, sender: ActorRef) {
         self.messages
             .push_back(MailboxMessage::User(message, sender))

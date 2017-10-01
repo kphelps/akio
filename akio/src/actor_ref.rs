@@ -1,16 +1,16 @@
-use super::ActorCellHandle;
+use super::ActorCell;
 use futures::prelude::*;
 use futures::sync::oneshot;
 use std::any::Any;
 
 #[derive(Clone)]
 pub struct ActorRef {
-    handle: ActorCellHandle,
+    cell: ActorCell,
 }
 
 impl ActorRef {
-    pub fn new(handle: ActorCellHandle) -> Self {
-        Self { handle: handle }
+    pub fn new(cell: ActorCell) -> Self {
+        Self { cell: cell }
     }
 
     pub fn send<T: Any + Send>(&self, message: T, sender: &ActorRef) {
@@ -18,7 +18,7 @@ impl ActorRef {
     }
 
     pub fn send_any(&self, message: Box<Any + Send>, sender: &ActorRef) {
-        self.handle.enqueue_message(message, sender.clone())
+        self.cell.enqueue_message(message, sender.clone())
     }
 
     pub fn ask<T>(&self,
