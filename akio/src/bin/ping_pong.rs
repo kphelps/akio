@@ -1,12 +1,9 @@
 extern crate akio;
 extern crate akio_syntax;
-extern crate futures;
 extern crate uuid;
 
 use akio::*;
 use akio_syntax::*;
-use futures::Future;
-use futures::future;
 use std::iter;
 use uuid::Uuid;
 

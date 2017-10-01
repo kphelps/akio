@@ -1,6 +1,4 @@
 use super::ActorRef;
-use futures::future;
-use futures::prelude::*;
 use std::any::Any;
 
 pub trait BaseActor: Send {

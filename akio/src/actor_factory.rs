@@ -17,23 +17,11 @@ impl ActorChildren {
         self.actor_refs.values()
     }
 
-    pub(self) fn insert(&mut self, id: Uuid, actor_ref: &ActorRef) {
+    pub(super) fn insert(&mut self, id: Uuid, actor_ref: &ActorRef) {
         match self.actor_refs.insert(id, actor_ref.clone()) {
             Some(_) => panic!("Invalid actor children insert"),
             None => (),
         }
-    }
-}
-
-pub trait ActorFactory {
-    fn children(&mut self) -> &mut ActorChildren;
-
-    fn spawn<A>(&mut self, system: &ActorSystem, id: Uuid, actor: A) -> ActorRef
-        where A: BaseActor + 'static
-    {
-        let actor_ref = create_actor(system, id, actor);
-        self.children().insert(id, &actor_ref);
-        actor_ref
     }
 }
 

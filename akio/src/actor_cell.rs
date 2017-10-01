@@ -1,9 +1,7 @@
-use super::{ActorContext, ActorRef, ActorSystem, BaseActor, context, Mailbox, MailboxMessage};
-use futures::stream;
-use futures::prelude::*;
+use super::{ActorChildren, ActorContext, ActorRef, ActorSystem, BaseActor, context, create_actor,
+            Mailbox, MailboxMessage};
 use parking_lot::Mutex;
 use std::any::Any;
-use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -34,6 +32,8 @@ impl ActorStatus {
 pub struct ActorCell {
     inner: Arc<Mutex<ActorCellInner>>,
     mailbox: Arc<Mutex<Mailbox>>,
+    children: Arc<Mutex<ActorChildren>>,
+    system: ActorSystem,
 }
 
 pub struct ActorCellInner {
@@ -52,12 +52,14 @@ impl ActorCell {
             id: id,
             status: ActorStatus::Idle,
             actor: Box::new(actor),
-            system: system,
+            system: system.clone(),
         };
         let p_inner = Arc::new(Mutex::new(inner));
         let cell = Self {
             inner: p_inner,
             mailbox: mailbox,
+            children: Arc::new(Mutex::new(ActorChildren::new())),
+            system: system.clone(),
         };
         cell
     }
@@ -66,7 +68,7 @@ impl ActorCell {
         self.with_inner(|inner| inner.id.clone())
     }
 
-    pub fn process_messages(&mut self, max_count: usize) -> usize {
+    pub fn process_messages(&self, max_count: usize) -> usize {
         let self_ref = ActorRef::new(self.clone());
         let message_batch = self.next_batch_to_process(max_count);
         let count = message_batch.len();
@@ -78,7 +80,7 @@ impl ActorCell {
         count
     }
 
-    pub fn next_batch_to_process(&mut self, count: usize) -> VecDeque<MailboxMessage> {
+    pub fn next_batch_to_process(&self, count: usize) -> VecDeque<MailboxMessage> {
         let mut mailbox = self.mailbox.lock();
         let mut v = VecDeque::with_capacity(count);
         for _ in 0..count {
@@ -96,7 +98,7 @@ impl ActorCell {
         self.try_with_inner_mut(|inner| { inner.dispatch(me); });
     }
 
-    pub fn set_idle_or_dispatch(&mut self) {
+    pub fn set_idle_or_dispatch(&self) {
         let me = self.clone();
         let mailbox = self.mailbox.lock();
         self.with_inner_mut(|inner| if mailbox.is_empty() {
@@ -106,11 +108,11 @@ impl ActorCell {
                             });
     }
 
-    pub fn set_idle(&mut self) {
+    pub fn set_idle(&self) {
         self.set_status(ActorStatus::Idle);
     }
 
-    fn set_status(&mut self, status: ActorStatus) {
+    fn set_status(&self, status: ActorStatus) {
         self.with_inner_mut(|inner| inner.set_status(status))
     }
 
@@ -128,7 +130,7 @@ impl ActorCell {
     fn with_inner<F, R>(&self, f: F) -> R
         where F: FnOnce(&ActorCellInner) -> R
     {
-        let mut inner = self.inner.lock();
+        let inner = self.inner.lock();
         let x = f(&inner);
         x
     }
@@ -145,6 +147,14 @@ impl ActorCell {
         where F: FnOnce(&mut ActorCellInner) -> R
     {
         self.inner.try_lock().map(|mut inner| f(&mut inner))
+    }
+
+    pub fn spawn<A>(&self, id: Uuid, actor: A) -> ActorRef
+        where A: BaseActor + 'static
+    {
+        let actor_ref = create_actor(&self.system, id, actor);
+        self.children.lock().insert(id, &actor_ref);
+        actor_ref
     }
 }
 

@@ -19,7 +19,7 @@ pub fn actor(input: TokenStream) -> TokenStream {
     let source = input.to_string();
     let dsl_ast = parse_actor(&source).expect("Failed to parse actor DSL");
     let tokens = codegen_actor(&dsl_ast);
-    println!("{}", tokens);
+    //println!("{}", tokens);
     tokens.parse().unwrap()
 }
 
@@ -174,7 +174,7 @@ fn codegen_actor_impl(dsl_ast: &ActorDefinition) -> quote::Tokens {
         .map(|message| codegen_message_handler(&message_name, message));
     quote!{
         mod #mod_name {
-            use akio::{Actor, ActorFactory, context, TypedActor};
+            use akio::{Actor, context, TypedActor};
             impl Actor for #name {
                 type Message = #message_name;
 
@@ -198,16 +198,9 @@ fn codegen_actor_impl(dsl_ast: &ActorDefinition) -> quote::Tokens {
                 pub fn spawn(id: Uuid) -> #actor_ref_name
                 {
                     context::with_mut(|ctx| {
-                        let system = ctx.system.clone();
-                        let actor_ref = ctx.spawn(&system, id, #name{});
+                        let actor_ref = ctx.self_ref.spawn(id, #name{});
                         Self::from_ref(&actor_ref)
                     })
-                }
-
-                pub fn with_children<F, R>(&self, f: F) -> R
-                    where F: FnOnce(&ActorChildren) -> R
-                {
-                    context::with(|ctx| f(&ctx.children))
                 }
 
                 pub fn sender<T: TypedActor>(&self) -> T::RefType {

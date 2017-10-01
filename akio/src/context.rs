@@ -1,4 +1,4 @@
-use super::{ActorChildren, ActorFactory, ActorRef, ActorSystem};
+use super::{ActorRef, ActorSystem};
 use futures::future::{Executor, Future, ExecuteError};
 use std::any::Any;
 use std::cell::RefCell;
@@ -54,15 +54,10 @@ pub fn get_current_sender() -> ActorRef {
     with(|ctx| ctx.sender.clone())
 }
 
-pub fn get_current_children() -> ActorChildren {
-    with(|ctx| ctx.children.clone())
-}
-
 #[derive(Clone)]
 pub struct ActorContext {
     pub self_ref: ActorRef,
     pub sender: ActorRef,
-    pub children: ActorChildren,
     pub system: ActorSystem,
 }
 
@@ -71,7 +66,6 @@ impl ActorContext {
         Self {
             self_ref: self_ref.clone(),
             sender: self_ref,
-            children: ActorChildren::new(),
             system: system,
         }
     }
@@ -82,11 +76,5 @@ impl ActorContext {
 
     pub fn reply<T: Any + Send>(&self, message: T) {
         self.send(message, &self.sender)
-    }
-}
-
-impl ActorFactory for ActorContext {
-    fn children(&mut self) -> &mut ActorChildren {
-        &mut self.children
     }
 }

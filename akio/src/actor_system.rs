@@ -1,13 +1,9 @@
 use super::{Actor, ActorCell, ActorRef, Dispatcher};
 use super::actor_factory::create_actor;
-use futures::prelude::*;
 use parking_lot::RwLock;
-use std::cell::RefCell;
-use std::collections::HashMap;
 use std::boxed::FnBox;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::Instant;
+use std::time::Duration;
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -46,7 +42,16 @@ impl ActorSystem {
     }
 
     pub fn start(&self) {
-        ::std::thread::sleep_ms(1000000);
+        ::std::thread::sleep(Duration::from_secs(1000000));
+    }
+
+    pub fn stop(self) {
+        Arc::try_unwrap(self.inner)
+            .ok()
+            .unwrap()
+            .into_inner()
+            .dispatcher
+            .join()
     }
 
     pub fn dispatch(&mut self, actor: ActorCell) {

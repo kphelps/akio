@@ -14,7 +14,7 @@ use std::iter;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio_core::reactor::{Core, Remote};
 
 lazy_static! {
@@ -41,15 +41,11 @@ impl ThreadHandle {
 
 pub struct Dispatcher {
     handles: Vec<ThreadHandle>,
-    thread_i: usize,
 }
 
 impl Dispatcher {
     pub fn new() -> Self {
-        Self {
-            handles: Vec::new(),
-            thread_i: 0,
-        }
+        Self { handles: Vec::new() }
     }
 
     pub fn start(&mut self) {
@@ -149,7 +145,7 @@ impl DispatcherThread {
             if arc_remote.lock().unwrap().is_some() {
                 break;
             }
-            thread::sleep_ms(10);
+            thread::sleep(Duration::from_millis(10));
         }
         let remote = arc_remote.lock().unwrap().as_ref().unwrap().clone();
         (remote, handle)
@@ -189,7 +185,7 @@ impl DispatcherThread {
 
 fn handle_message(message: ThreadMessage) {
     match message {
-        ThreadMessage::ProcessActor(mut actor_cell) => {
+        ThreadMessage::ProcessActor(actor_cell) => {
             let n = actor_cell.process_messages(10);
             count(n);
             actor_cell.set_idle_or_dispatch();
