@@ -66,15 +66,16 @@ impl ActorCell {
         self.with_inner(|inner| inner.id.clone())
     }
 
-    pub fn process_messages(&mut self, max_count: usize) {
+    pub fn process_messages(&mut self, max_count: usize) -> usize {
         let self_ref = ActorRef::new(self.clone());
         let message_batch = self.next_batch_to_process(max_count);
+        let count = message_batch.len();
         let mut inner = self.inner.lock();
         inner.set_current_actor(self_ref);
-
         message_batch
             .into_iter()
             .for_each(|message| inner.process_message(message));
+        count
     }
 
     pub fn next_batch_to_process(&mut self, count: usize) -> VecDeque<MailboxMessage> {

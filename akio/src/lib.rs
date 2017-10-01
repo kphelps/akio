@@ -4,6 +4,8 @@
 extern crate core_affinity;
 #[macro_use]
 extern crate futures;
+#[macro_use]
+extern crate lazy_static;
 #[cfg(not(target_os = "linux"))]
 extern crate num_cpus;
 extern crate parking_lot;

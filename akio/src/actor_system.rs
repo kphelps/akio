@@ -16,30 +16,8 @@ pub struct ActorSystem {
 }
 
 struct ActorSystemInner {
-    counter: Counter,
     dispatcher: Dispatcher,
     root_actor: Option<ActorRef>,
-}
-
-struct Counter {
-    start: Instant,
-    counter: AtomicUsize,
-}
-
-impl Counter {
-    pub fn count(&self) {
-        let count = self.counter.fetch_add(1, Ordering::SeqCst) + 1;
-        if count % 10000 == 0 {
-            let dt = (Instant::now() - self.start).as_secs() as usize;
-            if dt > 0 {
-                let rate = count / dt;
-                println!("Dispatch {} ({}/s)", count, rate);
-            }
-            if count > 10000000 {
-                ::std::process::exit(0);
-            }
-        }
-    }
 }
 
 impl ActorSystem {
@@ -47,10 +25,6 @@ impl ActorSystem {
         let mut dispatcher = Dispatcher::new();
         dispatcher.start();
         let inner = ActorSystemInner {
-            counter: Counter {
-                start: Instant::now(),
-                counter: AtomicUsize::new(0),
-            },
             dispatcher: dispatcher,
             root_actor: None,
         };
@@ -82,7 +56,6 @@ impl ActorSystem {
 
 impl ActorSystemInner {
     fn dispatch(&self, actor: ActorCell) {
-        self.counter.count();
         self.dispatcher.dispatch(actor)
     }
 }

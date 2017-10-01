@@ -8,6 +8,7 @@ akio-syntax = { path = "../akio-syntax" }
 bytes = "0.4"
 core_affinity = "0.4.2"
 futures = "0.1"
+lazy_static = "0.2"
 num_cpus = "1.0"
 parking_lot = { version = "0.4", features = ["nightly"] }
 rand = "0.3"

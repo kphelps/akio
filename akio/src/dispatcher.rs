@@ -13,7 +13,14 @@ use rand::Rng;
 use std::iter;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Instant;
 use tokio_core::reactor::{Core, Remote};
+
+lazy_static! {
+    static ref START: Instant = Instant::now();
+    static ref COUNTER: AtomicUsize = AtomicUsize::new(0);
+}
 
 
 enum ThreadMessage {
@@ -46,6 +53,7 @@ impl Dispatcher {
     }
 
     pub fn start(&mut self) {
+        println!("Starting: {:?}", *START);
         self.handles = self.create_threads();
     }
 
@@ -182,8 +190,23 @@ impl DispatcherThread {
 fn handle_message(message: ThreadMessage) {
     match message {
         ThreadMessage::ProcessActor(mut actor_cell) => {
-            actor_cell.process_messages(10);
+            let n = actor_cell.process_messages(10);
+            count(n);
             actor_cell.set_idle_or_dispatch();
+        }
+    }
+}
+
+fn count(n: usize) {
+    let count = COUNTER.fetch_add(n, Ordering::SeqCst) + n;
+    if count % 100000 == 0 {
+        let dt = (Instant::now() - *START).as_secs() as usize;
+        if dt > 0 {
+            let rate = count / dt;
+            println!("Dispatch {} ({}/s)", count, rate);
+        }
+        if count > 100000000 {
+            ::std::process::exit(0);
         }
     }
 }
