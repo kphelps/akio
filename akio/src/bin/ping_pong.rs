@@ -14,7 +14,7 @@ actor! {
     PongActor,
 
     message Ping() {
-        Box::new(future::ok(self.sender::<PingActor>().pong()))
+        self.sender::<PingActor>().pong()
     }
 }
 
@@ -22,7 +22,7 @@ actor! {
     PingActor,
 
     message Pong() {
-        Box::new(future::ok(self.sender::<PongActor>().ping()))
+        self.sender::<PongActor>().ping()
     }
 }
 
@@ -38,13 +38,24 @@ fn spawn_ping_loop() {
     pong.ping_with_sender(&ping);
     pong.ping_with_sender(&ping);
     pong.ping_with_sender(&ping);
+    pong.ping_with_sender(&ping);
+    pong.ping_with_sender(&ping);
+    pong.ping_with_sender(&ping);
+    pong.ping_with_sender(&ping);
+    pong.ping_with_sender(&ping);
+    pong.ping_with_sender(&ping);
+    pong.ping_with_sender(&ping);
+    pong.ping_with_sender(&ping);
+    pong.ping_with_sender(&ping);
+    pong.ping_with_sender(&ping);
+    pong.ping_with_sender(&ping);
+    pong.ping_with_sender(&ping);
+    pong.ping_with_sender(&ping);
+    pong.ping_with_sender(&ping);
 }
 
 pub fn main() {
     let mut system = ActorSystem::new();
-    system.on_startup(|| -> Box<Future<Item = (), Error = ()>> {
-                          iter::repeat(()).take(36).for_each(|_| spawn_ping_loop());
-                          Box::new(future::ok(()))
-                      });
+    system.on_startup(|| { iter::repeat(()).take(64).for_each(|_| spawn_ping_loop()); });
     system.start();
 }

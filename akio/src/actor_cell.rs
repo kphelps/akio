@@ -66,18 +66,15 @@ impl ActorCell {
         self.with_inner(|inner| inner.id.clone())
     }
 
-    pub fn process_messages(&mut self,
-                            max_count: usize)
-                            -> Box<Future<Item = (), Error = ()> + 'static> {
+    pub fn process_messages(&mut self, max_count: usize) {
         let self_ref = ActorRef::new(self.clone());
         let message_batch = self.next_batch_to_process(max_count);
         let mut inner = self.inner.lock();
         inner.set_current_actor(self_ref);
 
-        let futures = message_batch
+        message_batch
             .into_iter()
-            .map(|message| inner.process_message(message));
-        Box::new(stream::futures_ordered(futures).collect().map(|_| ()))
+            .for_each(|message| inner.process_message(message));
     }
 
     pub fn next_batch_to_process(&mut self, count: usize) -> VecDeque<MailboxMessage> {
@@ -163,9 +160,7 @@ impl ActorCellInner {
         self.system.dispatch(cell);
     }
 
-    fn process_message(&mut self,
-                       message: MailboxMessage)
-                       -> Box<Future<Item = (), Error = ()> + 'static> {
+    fn process_message(&mut self, message: MailboxMessage) {
         match message {
             MailboxMessage::User(inner, sender) => {
                 context::set_sender(sender);

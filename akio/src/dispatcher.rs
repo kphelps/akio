@@ -124,7 +124,11 @@ impl DispatcherThread {
         let cloned_arc_remote = arc_remote.clone();
         let handle = thread::spawn(move || {
             println!("Starting thread: {:?}", thread::current().id());
-            let stream = self.receiver.for_each(|message| handle_message(message));
+            let stream = self.receiver
+                .for_each(|message| {
+                              handle_message(message);
+                              Ok(())
+                          });
             let mut core = Core::new().expect("Failed to start dispatcher thread");
             let handle = core.handle();
             *cloned_arc_remote.lock().unwrap() = Some(core.remote());
@@ -170,12 +174,11 @@ impl DispatcherThread {
     }
 }
 
-fn handle_message(message: ThreadMessage) -> Box<Future<Item = (), Error = ()>> {
+fn handle_message(message: ThreadMessage) {
     match message {
         ThreadMessage::ProcessActor(mut actor_cell) => {
-            Box::new(actor_cell
-                         .process_messages(10)
-                         .map(move |_| { actor_cell.set_idle_or_dispatch(); }))
+            actor_cell.process_messages(10);
+            actor_cell.set_idle_or_dispatch();
         }
     }
 }
