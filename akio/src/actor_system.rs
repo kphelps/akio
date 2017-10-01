@@ -1,23 +1,46 @@
 use super::{Actor, ActorCell, ActorRef, Dispatcher};
 use super::actor_factory::create_actor;
 use futures::prelude::*;
-use parking_lot::Mutex;
+use parking_lot::RwLock;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::boxed::FnBox;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct ActorSystem {
-    inner: Arc<Mutex<ActorSystemInner>>,
+    inner: Arc<RwLock<ActorSystemInner>>,
 }
 
 struct ActorSystemInner {
-    start: Instant,
-    counter: u64,
+    counter: Counter,
     dispatcher: Dispatcher,
     root_actor: Option<ActorRef>,
+}
+
+struct Counter {
+    start: Instant,
+    counter: AtomicUsize,
+}
+
+impl Counter {
+    pub fn count(&self) {
+        let count = self.counter.fetch_add(1, Ordering::SeqCst) + 1;
+        if count % 10000 == 0 {
+            println!("Counter: {}", count);
+        }
+        if count > 1000000 {
+            let dt = (Instant::now() - self.start).as_secs() as usize;
+            if dt > 0 {
+                let rate = count / dt;
+                println!("Dispatch {} ({}/s)", count, rate);
+                ::std::process::exit(0);
+            }
+        }
+    }
 }
 
 impl ActorSystem {
@@ -25,13 +48,15 @@ impl ActorSystem {
         let mut dispatcher = Dispatcher::new();
         dispatcher.start();
         let inner = ActorSystemInner {
-            start: Instant::now(),
-            counter: 0,
+            counter: Counter {
+                start: Instant::now(),
+                counter: AtomicUsize::new(0),
+            },
             dispatcher: dispatcher,
             root_actor: None,
         };
-        let system = Self { inner: Arc::new(Mutex::new(inner)) };
-        system.inner.lock().root_actor =
+        let system = Self { inner: Arc::new(RwLock::new(inner)) };
+        system.inner.write().root_actor =
             Some(create_actor(&system, Uuid::new_v4(), GuardianActor {}));
         system
     }
@@ -45,7 +70,7 @@ impl ActorSystem {
     }
 
     fn root_actor(&self) -> ActorRef {
-        self.inner.lock().root_actor.as_ref().unwrap().clone()
+        self.inner.read().root_actor.as_ref().unwrap().clone()
     }
 
     pub fn start(&self) {
@@ -54,24 +79,13 @@ impl ActorSystem {
     }
 
     pub fn dispatch(&mut self, actor: ActorCell) {
-        self.inner.lock().dispatch(actor);
+        self.inner.read().dispatch(actor);
     }
 }
 
 impl ActorSystemInner {
-    fn dispatch(&mut self, actor: ActorCell) {
-        self.counter += 1;
-        if self.counter % 10000 == 0 {
-            println!("Counter: {}", self.counter);
-        }
-        if self.counter > 1000000 {
-            let dt = (Instant::now() - self.start).as_secs();
-            if dt > 0 {
-                let rate = self.counter / dt;
-                println!("Dispatch {} ({}/s)", self.counter, rate);
-                ::std::process::exit(0);
-            }
-        }
+    fn dispatch(&self, actor: ActorCell) {
+        self.counter.count();
         self.dispatcher.dispatch(actor)
     }
 }

@@ -8,6 +8,8 @@ use super::{ActorCell, context};
 use futures::future::Executor;
 use futures::prelude::*;
 use futures::sync::mpsc;
+use rand;
+use rand::Rng;
 use std::iter;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -51,7 +53,7 @@ impl Dispatcher {
         self.handles.into_iter().for_each(ThreadHandle::join)
     }
 
-    pub fn dispatch(&mut self, actor: ActorCell) {
+    pub fn dispatch(&self, actor: ActorCell) {
         let thread_handle = self.next_thread();
         let f = thread_handle
             .sender
@@ -101,11 +103,10 @@ impl Dispatcher {
         }
     }
 
-    fn next_thread(&mut self) -> &ThreadHandle {
-        let handle = &self.handles[self.thread_i];
-        self.thread_i += 1;
-        self.thread_i %= self.handles.len();
-        handle
+    fn next_thread(&self) -> &ThreadHandle {
+        let mut rng = rand::thread_rng();
+        let handle = rng.choose(&self.handles);
+        handle.unwrap()
     }
 }
 

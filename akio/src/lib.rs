@@ -7,6 +7,7 @@ extern crate futures;
 #[cfg(not(target_os = "linux"))]
 extern crate num_cpus;
 extern crate parking_lot;
+extern crate rand;
 extern crate tokio_core;
 extern crate uuid;
 
