@@ -3,7 +3,23 @@ use futures::sync::mpsc;
 use futures::future::{Executor, Future, ExecuteError};
 use std::any::Any;
 use std::cell::RefCell;
-use tokio_core::reactor::Remote;
+use tokio_core::reactor::{Handle, Remote};
+
+pub struct ThreadContext {
+    pub handle: Handle,
+}
+
+thread_local! {
+    static CURRENT_THREAD: RefCell<Option<ThreadContext>> = RefCell::new(None)
+}
+
+pub fn set_thread_context(context: ThreadContext) {
+    CURRENT_THREAD.with(|ctx| *ctx.borrow_mut() = Some(context))
+}
+
+pub fn handle() -> Handle {
+    CURRENT_THREAD.with(|ctx| ctx.borrow().as_ref().unwrap().handle.clone())
+}
 
 task_local! {
     static CURRENT_ACTOR: RefCell<Option<ActorContext>> = RefCell::new(None)

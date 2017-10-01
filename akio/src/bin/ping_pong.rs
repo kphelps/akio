@@ -36,7 +36,7 @@ fn spawn_ping_loop() -> Box<Future<Item = (), Error = ()>> {
 pub fn main() {
     let mut system = ActorSystem::new();
     system.on_startup(|| -> Box<Future<Item = (), Error = ()>> {
-                          let fs = iter::repeat(()).take(1).map(|_| spawn_ping_loop());
+                          let fs = iter::repeat(()).take(64).map(|_| spawn_ping_loop());
                           Box::new(future::join_all(fs).map(|_| ()))
                       });
     system.start();

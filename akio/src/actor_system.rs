@@ -1,4 +1,4 @@
-use super::{Actor, ActorCell, ActorChildren, ActorFactory, ActorRef, Dispatcher};
+use super::{Actor, ActorCell, ActorChildren, ActorFactory, ActorRef, context, Dispatcher};
 use super::actor_factory::create_actor;
 use futures::future::{Executor, ExecuteError};
 use futures::prelude::*;
@@ -41,6 +41,7 @@ impl ActorSystem {
     pub fn new() -> Self {
         let (sender, receiver) = mpsc::channel(100);
         let core = Core::new().expect("Failed to create event loop");
+        context::set_thread_context(context::ThreadContext { handle: core.handle() });
         let inner = ActorSystemInner {
             start: Instant::now(),
             counter: 0,
@@ -104,11 +105,15 @@ impl ActorSystemInner {
 
     fn dispatch(&mut self, id: &Uuid) {
         self.counter += 1;
-        if self.counter % 1000 == 0 {
+        if self.counter % 10000 == 0 {
+            println!("Counter: {}", self.counter);
+        }
+        if self.counter > 1000000 {
             let dt = (Instant::now() - self.start).as_secs();
             if dt > 0 {
                 let rate = self.counter / dt;
                 println!("Dispatch {} ({}/s)", self.counter, rate);
+                ::std::process::exit(0);
             }
         }
         match self.actors.insert(*id, ActorStatus::Scheduled()) {

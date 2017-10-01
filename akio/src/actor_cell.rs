@@ -90,7 +90,7 @@ impl ActorCellInner {
             .send(ActorEvent::MailboxReady(self.id))
             .map(|_| ())
             .map_err(|_| ());
-        self.remote_handle.execute(f).expect("readying mailbox");
+        context::handle().execute(f).expect("readying mailbox");
     }
 
     pub fn next_to_process(&mut self) -> Option<MailboxMessage> {

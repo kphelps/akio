@@ -4,7 +4,7 @@ use core_affinity;
 #[cfg(not(target_os = "linux"))]
 use num_cpus;
 
-use super::{ActorCell, ActorEvent};
+use super::{ActorCell, ActorEvent, context};
 use futures::prelude::*;
 use futures::sync::mpsc;
 use std::iter;
@@ -128,10 +128,10 @@ impl DispatcherThread {
         let to_system = self.to_system;
         let stream = self.receiver
             .for_each(|message| handle_message(to_system.clone(), message));
-        Core::new()
-            .expect("Failed to start dispatcher thread")
-            .run(stream)
-            .expect("Dispatcher failure");
+        let mut core = Core::new().expect("Failed to start dispatcher thread");
+        let handle = core.handle();
+        context::set_thread_context(context::ThreadContext { handle: handle });
+        core.run(stream).expect("Dispatcher failure");
     }
 }
 
