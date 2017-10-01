@@ -1,9 +1,10 @@
 use super::{Actor, ActorCell, ActorRef, Dispatcher};
 use super::actor_factory::create_actor;
 use futures::prelude::*;
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::boxed::FnBox;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Instant;
 use uuid::Uuid;
 
@@ -30,7 +31,7 @@ impl ActorSystem {
             root_actor: None,
         };
         let system = Self { inner: Arc::new(Mutex::new(inner)) };
-        system.inner.lock().unwrap().root_actor =
+        system.inner.lock().root_actor =
             Some(create_actor(&system, Uuid::new_v4(), GuardianActor {}));
         system
     }
@@ -44,13 +45,7 @@ impl ActorSystem {
     }
 
     fn root_actor(&self) -> ActorRef {
-        self.inner
-            .lock()
-            .unwrap()
-            .root_actor
-            .as_ref()
-            .unwrap()
-            .clone()
+        self.inner.lock().root_actor.as_ref().unwrap().clone()
     }
 
     pub fn start(&self) {
@@ -59,10 +54,7 @@ impl ActorSystem {
     }
 
     pub fn dispatch(&mut self, actor: ActorCell) {
-        self.inner
-            .lock()
-            .expect("Failed to dispatch")
-            .dispatch(actor);
+        self.inner.lock().dispatch(actor);
     }
 }
 
