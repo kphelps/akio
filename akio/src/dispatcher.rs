@@ -55,6 +55,7 @@ impl Dispatcher {
 
     pub fn dispatch(&self, actor: ActorCell) {
         let thread_handle = self.next_thread();
+
         let f = thread_handle
             .sender
             .clone()
@@ -155,7 +156,11 @@ impl DispatcherThread {
         let handle = thread::spawn(move || {
             println!("Starting thread: {:?}", thread::current().id());
             core_affinity::set_for_current(core_id);
-            let stream = self.receiver.for_each(|message| handle_message(message));
+            let stream = self.receiver
+                .for_each(|message| {
+                              handle_message(message);
+                              Ok(())
+                          });
             let mut core = Core::new().expect("Failed to start dispatcher thread");
             let handle = core.handle();
             *cloned_arc_remote.lock().unwrap() = Some(core.remote());
