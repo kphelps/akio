@@ -29,10 +29,35 @@ impl ActorStatus {
 }
 
 #[derive(Clone)]
+pub struct ActorCellHandle {
+    cell: Arc<ActorCell>,
+}
+
+impl ActorCellHandle {
+    pub fn process_messages(&self, max_count: usize) -> usize {
+        let self_ref = ActorRef::new(self.clone());
+        self.cell.process_messages(self_ref, max_count)
+    }
+
+    pub fn enqueue_message(&self, message: Box<Any + Send>, sender: ActorRef) {
+        self.cell.enqueue_message(self.clone(), message, sender)
+    }
+
+    pub fn set_idle_or_dispatch(&self) {
+        self.cell.set_idle_or_dispatch(self.clone())
+    }
+
+    pub fn spawn<A>(&self, id: Uuid, actor: A) -> ActorRef
+        where A: BaseActor + 'static
+    {
+        self.cell.spawn(id, actor)
+    }
+}
+
 pub struct ActorCell {
-    inner: Arc<Mutex<ActorCellInner>>,
-    mailbox: Arc<Mutex<Mailbox>>,
-    children: Arc<Mutex<ActorChildren>>,
+    inner: Mutex<ActorCellInner>,
+    mailbox: Mutex<Mailbox>,
+    children: Mutex<ActorChildren>,
     system: ActorSystem,
 }
 
@@ -44,32 +69,31 @@ pub struct ActorCellInner {
 }
 
 impl ActorCell {
-    pub fn new<A>(system: ActorSystem, id: Uuid, actor: A) -> Self
+    pub fn new<A>(system: ActorSystem, id: Uuid, actor: A) -> ActorCellHandle
         where A: BaseActor + 'static
     {
-        let mailbox = Arc::new(Mutex::new(Mailbox::new()));
+        let mailbox = Mutex::new(Mailbox::new());
         let inner = ActorCellInner {
             id: id,
             status: ActorStatus::Idle,
             actor: Box::new(actor),
             system: system.clone(),
         };
-        let p_inner = Arc::new(Mutex::new(inner));
+        let p_inner = Mutex::new(inner);
         let cell = Self {
             inner: p_inner,
             mailbox: mailbox,
-            children: Arc::new(Mutex::new(ActorChildren::new())),
+            children: Mutex::new(ActorChildren::new()),
             system: system.clone(),
         };
-        cell
+        ActorCellHandle { cell: Arc::new(cell) }
     }
 
     pub fn id(&self) -> Uuid {
         self.with_inner(|inner| inner.id.clone())
     }
 
-    pub fn process_messages(&self, max_count: usize) -> usize {
-        let self_ref = ActorRef::new(self.clone());
+    pub fn process_messages(&self, self_ref: ActorRef, max_count: usize) -> usize {
         let message_batch = self.next_batch_to_process(max_count);
         let count = message_batch.len();
         let mut inner = self.inner.lock();
@@ -92,14 +116,15 @@ impl ActorCell {
         v
     }
 
-    pub fn enqueue_message(&self, message: Box<Any + Send>, sender: ActorRef) {
-        let me = self.clone();
+    pub fn enqueue_message(&self,
+                           me: ActorCellHandle,
+                           message: Box<Any + Send>,
+                           sender: ActorRef) {
         self.mailbox.lock().push(message, sender);
         self.try_with_inner_mut(|inner| { inner.dispatch(me); });
     }
 
-    pub fn set_idle_or_dispatch(&self) {
-        let me = self.clone();
+    pub fn set_idle_or_dispatch(&self, me: ActorCellHandle) {
         let mailbox = self.mailbox.lock();
         self.with_inner_mut(|inner| if mailbox.is_empty() {
                                 inner.set_status(ActorStatus::Idle);
@@ -163,7 +188,7 @@ impl ActorCellInner {
         context::set_current_actor(ActorContext::new(self_ref, self.system.clone()))
     }
 
-    pub fn dispatch(&mut self, cell: ActorCell) {
+    pub fn dispatch(&mut self, cell: ActorCellHandle) {
         if self.status.is_scheduled() {
             return;
         }

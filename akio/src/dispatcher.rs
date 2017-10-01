@@ -4,7 +4,7 @@ use core_affinity;
 #[cfg(not(target_os = "linux"))]
 use num_cpus;
 
-use super::{ActorCell, context};
+use super::{ActorCellHandle, context};
 use futures::future::Executor;
 use futures::prelude::*;
 use futures::sync::mpsc;
@@ -24,7 +24,7 @@ lazy_static! {
 
 
 enum ThreadMessage {
-    ProcessActor(ActorCell),
+    ProcessActor(ActorCellHandle),
 }
 
 struct ThreadHandle {
@@ -57,7 +57,7 @@ impl Dispatcher {
         self.handles.into_iter().for_each(ThreadHandle::join)
     }
 
-    pub fn dispatch(&self, actor: ActorCell) {
+    pub fn dispatch(&self, actor: ActorCellHandle) {
         let thread_handle = self.next_thread();
 
         let f = thread_handle

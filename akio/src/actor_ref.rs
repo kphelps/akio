@@ -1,4 +1,4 @@
-use super::{ActorCell, AskActor, BaseActor};
+use super::{ActorCellHandle, AskActor, BaseActor};
 use futures::prelude::*;
 use futures::sync::oneshot;
 use std::any::Any;
@@ -6,11 +6,11 @@ use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct ActorRef {
-    cell: ActorCell,
+    cell: ActorCellHandle,
 }
 
 impl ActorRef {
-    pub fn new(cell: ActorCell) -> Self {
+    pub fn new(cell: ActorCellHandle) -> Self {
         Self { cell: cell }
     }
 

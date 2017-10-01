@@ -1,4 +1,4 @@
-use super::{Actor, ActorCell, ActorRef, Dispatcher};
+use super::{Actor, ActorCellHandle, ActorRef, Dispatcher};
 use super::actor_factory::create_actor;
 use parking_lot::RwLock;
 use std::boxed::FnBox;
@@ -54,13 +54,13 @@ impl ActorSystem {
             .join()
     }
 
-    pub fn dispatch(&mut self, actor: ActorCell) {
+    pub fn dispatch(&mut self, actor: ActorCellHandle) {
         self.inner.read().dispatch(actor);
     }
 }
 
 impl ActorSystemInner {
-    fn dispatch(&self, actor: ActorCell) {
+    fn dispatch(&self, actor: ActorCellHandle) {
         self.dispatcher.dispatch(actor)
     }
 }
