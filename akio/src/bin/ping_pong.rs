@@ -25,6 +25,14 @@ actor! {
     message Pong() {
         self.sender::<PongActor>().ping()
     }
+
+    hook on_start {
+        println!("Starting ping!");
+    }
+
+    hook on_stop {
+        println!("Stopping ping!");
+    }
 }
 
 fn spawn_ping_loop() {

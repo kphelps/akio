@@ -10,6 +10,7 @@ extern crate syn;
 extern crate synom;
 
 use proc_macro::TokenStream;
+use std::collections::HashMap;
 use syn::parse::{block, expr, ident, ty};
 use inflector::Inflector;
 
@@ -143,10 +144,49 @@ impl ActorStateField {
     }
 }
 
+#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq)]
+enum LifecycleHookType {
+    OnStart,
+    OnStop,
+}
+
+impl LifecycleHookType {
+    pub fn parse(input: &str) -> Option<Self> {
+        match input {
+            "on_start" => Some(LifecycleHookType::OnStart),
+            "on_stop" => Some(LifecycleHookType::OnStop),
+            _ => None,
+        }
+    }
+
+    pub fn to_impl_name(&self) -> syn::Ident {
+        match *self {
+            LifecycleHookType::OnStart => syn::Ident::from("on_start_impl"),
+            LifecycleHookType::OnStop => syn::Ident::from("on_stop_impl"),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct ActorLifecycleHook {
+    hook_name: String,
+    body: syn::Block,
+}
+
+impl ActorLifecycleHook {
+    pub fn new(name: syn::Ident, body: syn::Block) -> Self {
+        Self {
+            hook_name: name.as_ref().to_string(),
+            body: body,
+        }
+    }
+}
+
 #[derive(Debug)]
 enum ActorBodyElement {
     Message(ActorMessage),
     State(ActorState),
+    Hook(ActorLifecycleHook),
 }
 
 #[derive(Debug)]
@@ -154,12 +194,14 @@ struct ActorDefinition {
     name: syn::Ident,
     messages: Vec<ActorMessage>,
     state: Option<ActorState>,
+    lifecycle_hooks: HashMap<LifecycleHookType, Vec<ActorLifecycleHook>>,
 }
 
 impl ActorDefinition {
     pub fn new(name: syn::Ident, body_elements: Vec<ActorBodyElement>) -> Self {
         let mut state = None;
         let mut messages = Vec::new();
+        let mut hooks = HashMap::new();
         body_elements
             .into_iter()
             .for_each(|element| match element {
@@ -171,11 +213,21 @@ impl ActorDefinition {
                                   panic!("Only one state block is allowed in an actor definition");
                               }
                           }
+                          ActorBodyElement::Hook(hook) => {
+                              let maybe_hook_type = LifecycleHookType::parse(&hook.hook_name);
+                              if maybe_hook_type.is_some() {
+                                  let hook_type = maybe_hook_type.unwrap();
+                                  hooks.entry(hook_type).or_insert(Vec::new()).push(hook)
+                              } else {
+                                  panic!("Invalid hook name: {}", hook.hook_name);
+                              }
+                          }
                       });
         Self {
             name: name,
             messages: messages,
             state: state,
+            lifecycle_hooks: hooks,
         }
     }
 
@@ -244,6 +296,18 @@ named! { parse_body -> ActorBodyElement,
         parse_state => { ActorBodyElement::State }
         |
         parse_message => { ActorBodyElement::Message }
+        |
+        parse_lifecycle_hook => { ActorBodyElement::Hook }
+    )
+}
+
+named! { parse_lifecycle_hook -> ActorLifecycleHook,
+    do_parse! (
+        punct!("hook") >>
+        name: ident >>
+        body: block >>
+
+        (ActorLifecycleHook::new(name, body))
     )
 }
 
@@ -375,6 +439,7 @@ fn codegen_actor_impl(dsl_ast: &ActorDefinition) -> quote::Tokens {
     let mod_name = syn::Ident::from(format!("_impl_actor_{}", name.as_ref().to_snake_case()));
     let state_field_args = dsl_ast.state_field_args();
     let state_field_names = dsl_ast.state_field_uninitialized_names();
+    let hook_methods = codegen_hook_methods(&dsl_ast);
     let message_handlers = dsl_ast
         .messages
         .iter()
@@ -391,6 +456,8 @@ fn codegen_actor_impl(dsl_ast: &ActorDefinition) -> quote::Tokens {
                         #(#message_handlers,)*
                     }
                 }
+
+                #hook_methods
             }
 
             impl TypedActor for #name {
@@ -425,6 +492,30 @@ fn codegen_actor_impl(dsl_ast: &ActorDefinition) -> quote::Tokens {
                     context::with(|ctx| T::from_ref(&ctx.sender))
                 }
             }
+        }
+    }
+}
+
+fn codegen_hook_methods(dsl_ast: &ActorDefinition) -> quote::Tokens {
+    let hook_methods = dsl_ast
+        .lifecycle_hooks
+        .iter()
+        .map(|(k, v)| codegen_lifecycle_hook_method(k, v))
+        .collect::<Vec<quote::Tokens>>();
+
+    quote! {
+        #(#hook_methods)*
+    }
+}
+
+fn codegen_lifecycle_hook_method(tipe: &LifecycleHookType,
+                                 hooks: &Vec<ActorLifecycleHook>)
+                                 -> quote::Tokens {
+    let method_name = tipe.to_impl_name();
+    let hook_blocks = hooks.iter().map(|hook| &hook.body);
+    quote!{
+        fn #method_name(&mut self) {
+            #(#hook_blocks)*
         }
     }
 }
