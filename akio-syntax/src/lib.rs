@@ -10,9 +10,8 @@ extern crate syn;
 extern crate synom;
 
 use proc_macro::TokenStream;
-use syn::parse::{block, ident, ty};
+use syn::parse::{block, expr, ident, ty};
 use inflector::Inflector;
-
 
 #[proc_macro]
 pub fn actor(input: TokenStream) -> TokenStream {
@@ -71,17 +70,112 @@ impl ActorMessage {
     }
 }
 
+#[derive(Clone, Debug)]
+struct ActorState {
+    fields: Vec<ActorStateField>,
+}
+
+impl ActorState {
+    pub fn new(fields: Vec<ActorStateField>) -> Self {
+        Self { fields: fields }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct ActorStateField {
+    name: syn::Ident,
+    tipe: syn::Ty,
+    maybe_init: Option<syn::Expr>,
+}
+
+impl ActorStateField {
+    pub fn new(name: syn::Ident, tipe: syn::Ty, maybe_init: Option<syn::Expr>) -> Self {
+        Self {
+            name: name,
+            tipe: tipe,
+            maybe_init: maybe_init,
+        }
+    }
+
+    pub fn as_struct_field(&self) -> syn::Field {
+        syn::Field {
+            ident: Some(self.name.clone()),
+            vis: syn::Visibility::Public,
+            attrs: Vec::new(),
+            ty: self.tipe.clone(),
+        }
+    }
+
+    pub fn as_arg(&self) -> Option<syn::BareFnArg> {
+        if self.maybe_init.is_none() {
+            Some(syn::BareFnArg {
+                     name: Some(self.name.clone()),
+                     ty: self.tipe.clone(),
+                 })
+        } else {
+            None
+        }
+    }
+
+    pub fn as_struct_field_value(&self) -> syn::FieldValue {
+        let expr = if self.maybe_init.is_none() {
+            syn::Expr {
+                node: syn::ExprKind::Path(None,
+                                          syn::Path {
+                                              global: false,
+                                              segments: vec![syn::PathSegment {
+                                                                 ident: self.name.clone(),
+                                                                 parameters:
+                                                                     syn::PathParameters::none(),
+                                                             }],
+                                          }),
+                attrs: Vec::new(),
+            }
+        } else {
+            self.maybe_init.as_ref().unwrap().clone()
+        };
+        syn::FieldValue {
+            ident: self.name.clone(),
+            expr: expr,
+            is_shorthand: false,
+            attrs: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug)]
+enum ActorBodyElement {
+    Message(ActorMessage),
+    State(ActorState),
+}
+
 #[derive(Debug)]
 struct ActorDefinition {
     name: syn::Ident,
     messages: Vec<ActorMessage>,
+    state: Option<ActorState>,
 }
 
 impl ActorDefinition {
-    pub fn new(name: syn::Ident, messages: Vec<ActorMessage>) -> Self {
+    pub fn new(name: syn::Ident, body_elements: Vec<ActorBodyElement>) -> Self {
+        let mut state = None;
+        let mut messages = Vec::new();
+        body_elements
+            .into_iter()
+            .for_each(|element| match element {
+                          ActorBodyElement::Message(message) => messages.push(message),
+                          ActorBodyElement::State(state_element) => {
+                              if state.is_none() {
+                                  state = Some(state_element);
+                              } else {
+                                  panic!("Only one state block is allowed in an actor definition");
+                              }
+                          }
+                      });
         Self {
             name: name,
             messages: messages,
+            state: state,
         }
     }
 
@@ -92,14 +186,88 @@ impl ActorDefinition {
     pub fn actor_ref_name(&self) -> syn::Ident {
         syn::Ident::from(format!("{}Ref", self.name.as_ref()))
     }
+
+    pub fn state_name(&self) -> syn::Ident {
+        syn::Ident::from(format!("{}State", self.name.as_ref()))
+    }
+
+    pub fn state_fields(&self) -> Vec<ActorStateField> {
+        self.state
+            .clone()
+            .map(|state| state.fields)
+            .unwrap_or(Vec::new())
+    }
+
+    pub fn state_struct_fields(&self) -> Vec<syn::Field> {
+        self.state_fields()
+            .iter()
+            .map(ActorStateField::as_struct_field)
+            .collect()
+    }
+
+    pub fn state_struct_field_values(&self) -> Vec<syn::FieldValue> {
+        self.state_fields()
+            .iter()
+            .map(ActorStateField::as_struct_field_value)
+            .collect()
+    }
+
+    pub fn state_field_args(&self) -> Vec<syn::BareFnArg> {
+        self.state_fields()
+            .iter()
+            .filter_map(ActorStateField::as_arg)
+            .collect()
+    }
+
+    pub fn state_field_uninitialized_names(&self) -> Vec<syn::Ident> {
+        self.state_fields()
+            .iter()
+            .filter_map(|field| match field.maybe_init.as_ref() {
+                            Some(_) => None,
+                            None => Some(field.name.clone()),
+                        })
+            .collect()
+    }
 }
 
 named! { parse_actor -> ActorDefinition,
     do_parse!(
         name: ident >> punct!(",") >>
-        body: many0!(parse_message) >>
+        body: many0!(parse_body) >>
 
         (ActorDefinition::new(name, body))
+    )
+}
+
+named! { parse_body -> ActorBodyElement,
+    alt!(
+        parse_state => { ActorBodyElement::State }
+        |
+        parse_message => { ActorBodyElement::Message }
+    )
+}
+
+named! { parse_state -> ActorState,
+    do_parse! (
+        punct!("state") >>
+        fields: delimited!(
+            punct!("{"),
+            terminated_list!(punct!(","), parse_state_field),
+            punct!("}")
+        ) >>
+
+        (ActorState::new(fields))
+    )
+}
+
+named! { parse_state_field -> ActorStateField,
+    do_parse! (
+        name: ident >>
+        punct!(":") >>
+        tipe: ty >>
+        maybe_init: option!(preceded!(punct!("="), expr)) >>
+
+        (ActorStateField::new(name, tipe, maybe_init))
     )
 }
 
@@ -157,8 +325,45 @@ fn codegen_message_variant(message_ast: &ActorMessage) -> quote::Tokens {
 
 fn codegen_actor_struct(dsl_ast: &ActorDefinition) -> quote::Tokens {
     let name = &dsl_ast.name;
+    let state_name = dsl_ast.state_name();
+    let state_struct = codegen_actor_state_struct(&dsl_ast);
+    let state_args = &dsl_ast.state_field_args();
+    let state_field_names = &dsl_ast.state_field_uninitialized_names();
+    quote! {
+        #state_struct
+
+        struct #name {
+            #[allow(dead_code)]
+            state: #state_name,
+        }
+
+        impl #name {
+            pub fn new(#(#state_args),*) -> Self {
+                Self {
+                    state: #state_name::new(#(#state_field_names),*)
+                }
+            }
+        }
+    }
+}
+
+fn codegen_actor_state_struct(dsl_ast: &ActorDefinition) -> quote::Tokens {
+    let name = dsl_ast.state_name();
+    let state_fields = dsl_ast.state_struct_fields();
+    let state_args = dsl_ast.state_field_args();
+    let state_field_values = dsl_ast.state_struct_field_values();
+
     quote! {
         struct #name {
+            #(#state_fields,)*
+        }
+
+        impl #name {
+            pub fn new(#(#state_args),*) -> Self {
+                Self {
+                    #(#state_field_values,)*
+                }
+            }
         }
     }
 }
@@ -168,6 +373,8 @@ fn codegen_actor_impl(dsl_ast: &ActorDefinition) -> quote::Tokens {
     let message_name = dsl_ast.message_name();
     let actor_ref_name = dsl_ast.actor_ref_name();
     let mod_name = syn::Ident::from(format!("_impl_actor_{}", name.as_ref().to_snake_case()));
+    let state_field_args = dsl_ast.state_field_args();
+    let state_field_names = dsl_ast.state_field_uninitialized_names();
     let message_handlers = dsl_ast
         .messages
         .iter()
@@ -196,10 +403,10 @@ fn codegen_actor_impl(dsl_ast: &ActorDefinition) -> quote::Tokens {
 
             #[allow(dead_code)]
             impl #name {
-                pub fn spawn(id: Uuid) -> #actor_ref_name
+                pub fn spawn(id: Uuid, #(#state_field_args),*) -> #actor_ref_name
                 {
                     context::with_mut(|ctx| {
-                        let actor_ref = ctx.self_ref.spawn(id, #name{});
+                        let actor_ref = ctx.self_ref.spawn(id, #name::new(#(#state_field_names),*));
                         Self::from_ref(&actor_ref)
                     })
                 }
