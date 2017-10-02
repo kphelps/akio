@@ -1,13 +1,6 @@
 extern crate akio;
-extern crate akio_syntax;
-extern crate futures;
-extern crate uuid;
 
-use akio::*;
-use akio_syntax::*;
-use futures::prelude::*;
-use futures::future;
-use uuid::Uuid;
+use akio::prelude::*;
 
 actor! {
     TelephoneActor,

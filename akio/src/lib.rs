@@ -1,5 +1,7 @@
 #![feature(fnbox)]
+#![feature(proc_macro)]
 
+extern crate akio_syntax;
 #[cfg(target_os = "linux")]
 extern crate core_affinity;
 #[macro_use]
@@ -22,6 +24,7 @@ mod ask_actor;
 pub mod context;
 mod dispatcher;
 mod mailbox;
+pub mod prelude;
 
 pub use actor::Actor;
 pub use actor::BaseActor;

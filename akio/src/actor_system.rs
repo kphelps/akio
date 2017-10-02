@@ -34,7 +34,7 @@ impl ActorSystem {
         where F: FnBox() + 'static + Send
     {
         let root_ref = self.root_actor();
-        root_ref.send(GuardianMessage::Execute(Box::new(f)), &root_ref)
+        root_ref.send_from(GuardianMessage::Execute(Box::new(f)), &root_ref)
     }
 
     fn root_actor(&self) -> ActorRef {

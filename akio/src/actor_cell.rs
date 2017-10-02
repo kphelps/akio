@@ -27,6 +27,10 @@ pub struct ActorCellHandle {
 }
 
 impl ActorCellHandle {
+    pub fn id(&self) -> &Uuid {
+        &self.cell.id
+    }
+
     pub fn process_messages(&self, max_count: usize) -> usize {
         let self_ref = ActorRef::new(self.clone());
         self.cell.process_messages(self_ref, max_count)
@@ -54,6 +58,7 @@ impl ActorCellHandle {
 }
 
 pub struct ActorCell {
+    id: Uuid,
     inner: Mutex<ActorCellInner>,
     mailbox: Mutex<Mailbox>,
     children: Mutex<ActorChildren>,
@@ -61,7 +66,6 @@ pub struct ActorCell {
 }
 
 pub struct ActorCellInner {
-    id: Uuid,
     status: ActorStatus,
     actor: Box<BaseActor>,
     system: ActorSystem,
@@ -73,13 +77,13 @@ impl ActorCell {
     {
         let mailbox = Mutex::new(Mailbox::new());
         let inner = ActorCellInner {
-            id: id,
             status: ActorStatus::Idle,
             actor: Box::new(actor),
             system: system.clone(),
         };
         let p_inner = Mutex::new(inner);
         let cell = Self {
+            id: id,
             inner: p_inner,
             mailbox: mailbox,
             children: Mutex::new(ActorChildren::new()),

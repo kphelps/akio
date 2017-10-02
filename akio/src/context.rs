@@ -1,5 +1,5 @@
 use super::{ActorRef, ActorSystem};
-use futures::future::{Executor, Future, ExecuteError};
+use futures::future::Future;
 use std::any::Any;
 use std::cell::RefCell;
 use tokio_core::reactor::Handle;
@@ -20,10 +20,14 @@ pub fn handle() -> Handle {
     CURRENT_THREAD.with(|ctx| ctx.borrow().as_ref().unwrap().handle.clone())
 }
 
-pub fn execute<F>(f: F) -> Result<(), ExecuteError<F>>
+pub fn execute<F>(f: F)
     where F: Future<Item = (), Error = ()> + Send + 'static
 {
-    handle().execute(f)
+    let copied = with(ActorContext::clone);
+    handle().spawn_fn(move || {
+                          set_current_actor(copied);
+                          f
+                      })
 }
 
 task_local! {
@@ -71,7 +75,7 @@ impl ActorContext {
     }
 
     pub fn send<T: Any + Send>(&self, message: T, target: &ActorRef) {
-        target.send(message, &self.self_ref)
+        target.send_from(message, &self.self_ref)
     }
 
     pub fn reply<T: Any + Send>(&self, message: T) {

@@ -210,6 +210,10 @@ fn codegen_actor_impl(dsl_ast: &ActorDefinition) -> quote::Tokens {
                     context::with(|ctx| ctx.self_ref.with_children(f))
                 }
 
+                pub fn sender_ref(&self) -> ActorRef {
+                    context::with(|ctx| ctx.sender.clone())
+                }
+
                 pub fn sender<T: TypedActor>(&self) -> T::RefType {
                     context::with(|ctx| T::from_ref(&ctx.sender))
                 }
@@ -244,6 +248,7 @@ fn codegen_ref(dsl_ast: &ActorDefinition) -> quote::Tokens {
             use akio::ActorRef;
             use std::ops::Deref;
             use akio::context;
+            use akio::prelude::*;
             pub struct #name {
                 inner: ActorRef,
             }
@@ -272,6 +277,7 @@ fn codegen_message_method(message_enum_name: &syn::Ident,
     let message_name = &message_ast.name;
     let method_name = syn::Ident::from(message_name.as_ref().to_snake_case());
     let method_with_sender_name = syn::Ident::from(format!("{}_with_sender", method_name.as_ref()));
+    let ask_method = syn::Ident::from(format!("ask_{}", method_name.as_ref()));
     let field_args = &message_ast.fields_as_args();
     let field_arg_names = &message_ast.field_names();
     quote! {
@@ -286,10 +292,18 @@ fn codegen_message_method(message_enum_name: &syn::Ident,
             #(#field_args,)*
             akio_internal_sender: &ActorRef
         ) {
-            self.inner.send(
+            self.inner.send_from(
                 #message_enum_name::#message_name(#(#field_arg_names,)*),
                 akio_internal_sender
             );
+        }
+
+        pub fn #ask_method<T>(&self, #(#field_args,)*) -> Box<Future<Item = T, Error = ()> + Send>
+            where T: Send + 'static
+        {
+            self.inner.ask::<T, #message_enum_name>(
+                #message_enum_name::#message_name(#(#field_arg_names,)*),
+            )
         }
     }
 }

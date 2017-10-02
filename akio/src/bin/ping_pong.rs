@@ -1,11 +1,7 @@
 extern crate akio;
-extern crate akio_syntax;
-extern crate uuid;
 
-use akio::*;
-use akio_syntax::*;
+use akio::prelude::*;
 use std::iter;
-use uuid::Uuid;
 
 actor! {
     PongActor,
