@@ -194,6 +194,7 @@ fn codegen_actor_impl(dsl_ast: &ActorDefinition) -> quote::Tokens {
                 }
             }
 
+            #[allow(dead_code)]
             impl #name {
                 pub fn spawn(id: Uuid) -> #actor_ref_name
                 {
@@ -201,6 +202,12 @@ fn codegen_actor_impl(dsl_ast: &ActorDefinition) -> quote::Tokens {
                         let actor_ref = ctx.self_ref.spawn(id, #name{});
                         Self::from_ref(&actor_ref)
                     })
+                }
+
+                pub fn with_children<F, R>(&self, f: F) -> R
+                    where F: FnOnce(&ActorChildren) -> R
+                {
+                    context::with(|ctx| ctx.self_ref.with_children(f))
                 }
 
                 pub fn sender<T: TypedActor>(&self) -> T::RefType {

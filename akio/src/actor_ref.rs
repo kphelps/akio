@@ -1,4 +1,4 @@
-use super::{ActorCellHandle, AskActor, BaseActor};
+use super::{ActorCellHandle, ActorChildren, AskActor, BaseActor};
 use futures::prelude::*;
 use futures::sync::oneshot;
 use std::any::Any;
@@ -22,10 +22,16 @@ impl ActorRef {
         self.cell.enqueue_message(message, sender.clone())
     }
 
-    pub fn spawn<A>(&mut self, id: Uuid, actor: A) -> ActorRef
+    pub fn spawn<A>(&self, id: Uuid, actor: A) -> ActorRef
         where A: BaseActor + 'static
     {
         self.cell.spawn(id, actor)
+    }
+
+    pub fn with_children<F, R>(&self, f: F) -> R
+        where F: FnOnce(&ActorChildren) -> R
+    {
+        self.cell.with_children(f)
     }
 
     pub fn ask_any<T>(&mut self, message: Box<Any + Send>) -> Box<Future<Item = T, Error = ()>>

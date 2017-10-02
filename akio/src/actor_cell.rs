@@ -13,13 +13,6 @@ pub enum ActorStatus {
 }
 
 impl ActorStatus {
-    pub fn is_idle(&self) -> bool {
-        match self {
-            &ActorStatus::Idle => true,
-            _ => false,
-        }
-    }
-
     pub fn is_scheduled(&self) -> bool {
         match self {
             &ActorStatus::Scheduled => true,
@@ -51,6 +44,12 @@ impl ActorCellHandle {
         where A: BaseActor + 'static
     {
         self.cell.spawn(id, actor)
+    }
+
+    pub fn with_children<F, R>(&self, f: F) -> R
+        where F: FnOnce(&ActorChildren) -> R
+    {
+        f(&self.cell.children.lock())
     }
 }
 
@@ -87,10 +86,6 @@ impl ActorCell {
             system: system.clone(),
         };
         ActorCellHandle { cell: Arc::new(cell) }
-    }
-
-    pub fn id(&self) -> Uuid {
-        self.with_inner(|inner| inner.id.clone())
     }
 
     pub fn process_messages(&self, self_ref: ActorRef, max_count: usize) -> usize {
@@ -131,33 +126,6 @@ impl ActorCell {
                             } else {
                                 inner.system.dispatch(me)
                             });
-    }
-
-    pub fn set_idle(&self) {
-        self.set_status(ActorStatus::Idle);
-    }
-
-    fn set_status(&self, status: ActorStatus) {
-        self.with_inner_mut(|inner| inner.set_status(status))
-    }
-
-    pub fn is_scheduled(&self) -> bool {
-        match self.get_status() {
-            ActorStatus::Scheduled => true,
-            _ => false,
-        }
-    }
-
-    pub fn get_status(&self) -> ActorStatus {
-        self.with_inner(|inner| inner.status)
-    }
-
-    fn with_inner<F, R>(&self, f: F) -> R
-        where F: FnOnce(&ActorCellInner) -> R
-    {
-        let inner = self.inner.lock();
-        let x = f(&inner);
-        x
     }
 
     fn with_inner_mut<F, R>(&self, f: F) -> R
