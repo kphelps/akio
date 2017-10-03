@@ -1,7 +1,9 @@
-use super::{Actor, ActorCellHandle, ActorRef, Dispatcher};
+use super::{Actor, ActorCell, ActorCellHandle, ActorRef, Dispatcher};
+use super::errors::*;
 use super::actor_factory::create_actor;
 use parking_lot::RwLock;
 use std::boxed::FnBox;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use uuid::Uuid;
@@ -14,6 +16,7 @@ pub struct ActorSystem {
 struct ActorSystemInner {
     dispatcher: Dispatcher,
     root_actor: Option<ActorRef>,
+    actors: HashMap<Uuid, Arc<ActorCell>>,
 }
 
 impl ActorSystem {
@@ -23,6 +26,7 @@ impl ActorSystem {
         let inner = ActorSystemInner {
             dispatcher: dispatcher,
             root_actor: None,
+            actors: HashMap::new(),
         };
         let system = Self { inner: Arc::new(RwLock::new(inner)) };
         system.inner.write().root_actor =
@@ -46,16 +50,34 @@ impl ActorSystem {
     }
 
     pub fn stop(self) {
-        Arc::try_unwrap(self.inner)
-            .ok()
-            .unwrap()
-            .into_inner()
-            .dispatcher
-            .join()
+        self.inner.write().dispatcher.join()
     }
 
     pub fn dispatch(&mut self, actor: ActorCellHandle) {
         self.inner.read().dispatch(actor);
+    }
+
+    pub fn register_actor(&self, id: Uuid, actor: Arc<ActorCell>) {
+        if let Some(_) = self.inner.write().actors.insert(id.clone(), actor) {
+            println!("Replacing existing actor?")
+        }
+    }
+
+    pub fn deregister_actor(&self, id: &Uuid) -> Result<()> {
+        self.inner
+            .write()
+            .actors
+            .remove(id)
+            .ok_or(ErrorKind::InvalidActor(id.clone()).into())
+            .map(|_| ())
+    }
+
+    pub fn get_actor(&self, id: &Uuid) -> Option<ActorRef> {
+        self.inner
+            .read()
+            .actors
+            .get(id)
+            .map(|rc| ActorRef::new(ActorCellHandle::new(Arc::downgrade(rc))))
     }
 }
 
@@ -75,7 +97,6 @@ impl Actor for GuardianActor {
     type Message = GuardianMessage;
 
     fn handle_message(&mut self, message: Self::Message) {
-        println!("Process?");
         match message {
             GuardianMessage::Execute(f) => f(),
         }

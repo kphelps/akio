@@ -32,6 +32,10 @@ pub trait Actor {
     fn sender<T: TypedActor>(&self) -> T::RefType {
         context::with(|ctx| T::from_ref(ctx.sender.clone()))
     }
+
+    fn reply<T: Any + Send>(&self, message: T) {
+        context::with(|ctx| ctx.reply(message))
+    }
 }
 
 impl<T> BaseActor for T

@@ -1,59 +1,111 @@
 use super::{ActorChildren, ActorContext, ActorRef, ActorSystem, BaseActor, context, create_actor,
-            Mailbox, MailboxMessage};
+            Mailbox, MailboxMessage, SystemMessage};
+use super::errors::*;
 use parking_lot::Mutex;
 use std::any::Any;
 use std::collections::VecDeque;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use uuid::Uuid;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ActorStatus {
     Idle,
     Scheduled,
+    Suspended,
+    Terminated,
 }
 
 impl ActorStatus {
     pub fn is_scheduled(&self) -> bool {
-        match self {
-            &ActorStatus::Scheduled => true,
-            _ => false,
-        }
+        *self == ActorStatus::Scheduled
+    }
+
+    pub fn is_idle(&self) -> bool {
+        *self == ActorStatus::Idle
+    }
+
+    pub fn is_suspended(&self) -> bool {
+        *self == ActorStatus::Suspended
+    }
+
+    pub fn is_terminated(&self) -> bool {
+        *self == ActorStatus::Terminated
     }
 }
 
 #[derive(Clone)]
 pub struct ActorCellHandle {
-    cell: Arc<ActorCell>,
+    // ActorSystem holds the only RCs. When the actor is stopped the pointer
+    // will fail to upgrade.
+    cell: Weak<ActorCell>,
 }
 
 impl ActorCellHandle {
-    pub fn id(&self) -> &Uuid {
-        &self.cell.id
+    pub fn new(p_cell: Weak<ActorCell>) -> Self {
+        Self { cell: p_cell }
+    }
+
+    pub fn exists(&self) -> bool {
+        self.cell.upgrade().is_some()
+    }
+
+    pub fn id(&self) -> Uuid {
+        self.with_cell_unwrapped(|cell| cell.id.clone())
     }
 
     pub fn process_messages(&self, max_count: usize) -> usize {
         let self_ref = ActorRef::new(self.clone());
-        self.cell.process_messages(self_ref, max_count)
+        self.with_cell_unwrapped(|cell| cell.process_messages(self_ref, max_count))
     }
 
     pub fn enqueue_message(&self, message: Box<Any + Send>, sender: ActorRef) {
-        self.cell.enqueue_message(self.clone(), message, sender)
+        let me = self.clone();
+        if let Err(e) = self.with_cell(|cell| cell.enqueue_message(me, message, sender)) {
+            println!("Enqueued dead message: {}", e);
+        }
+    }
+
+    pub fn enqueue_system_message(&self, message: SystemMessage) {
+        let me = self.clone();
+        if let Err(e) = self.with_cell(|cell| cell.enqueue_system_message(me, message)) {
+            println!("Enqueued dead system message: {}", e);
+        }
     }
 
     pub fn set_idle_or_dispatch(&self) {
-        self.cell.set_idle_or_dispatch(self.clone())
+        let me = self.clone();
+        let _ = self.with_cell(|cell| cell.set_idle_or_dispatch(me));
     }
 
     pub fn spawn<A>(&self, id: Uuid, actor: A) -> ActorRef
         where A: BaseActor + 'static
     {
-        self.cell.spawn(id, actor)
+        self.with_cell_unwrapped(|cell| cell.spawn(id, actor))
     }
 
     pub fn with_children<F, R>(&self, f: F) -> R
         where F: FnOnce(&ActorChildren) -> R
     {
-        f(&self.cell.children.lock())
+        self.with_cell_unwrapped(|cell| f(&cell.children.lock()))
+    }
+
+    pub fn on_start(&self) {
+        self.with_cell_unwrapped(|cell| cell.on_start())
+    }
+
+    fn with_cell<F, R>(&self, f: F) -> Result<R>
+        where F: FnOnce(Arc<ActorCell>) -> R
+    {
+        match self.cell.upgrade() {
+            Some(cell) => Ok(f(cell)),
+            None => bail!(ErrorKind::ActorDestroyed),
+        }
+    }
+
+    fn with_cell_unwrapped<F, R>(&self, f: F) -> R
+        where F: FnOnce(Arc<ActorCell>) -> R
+    {
+        self.with_cell(f).expect("actor ref invalidated")
     }
 }
 
@@ -66,17 +118,19 @@ pub struct ActorCell {
 }
 
 pub struct ActorCellInner {
+    id: Uuid,
     status: ActorStatus,
     actor: Box<BaseActor>,
     system: ActorSystem,
 }
 
 impl ActorCell {
-    pub fn new<A>(system: ActorSystem, id: Uuid, actor: A) -> ActorCellHandle
+    pub fn new<A>(system: ActorSystem, id: Uuid, actor: A) -> Arc<ActorCell>
         where A: BaseActor + 'static
     {
         let mailbox = Mutex::new(Mailbox::new());
         let inner = ActorCellInner {
+            id: id.clone(),
             status: ActorStatus::Idle,
             actor: Box::new(actor),
             system: system.clone(),
@@ -89,7 +143,7 @@ impl ActorCell {
             children: Mutex::new(ActorChildren::new()),
             system: system.clone(),
         };
-        ActorCellHandle { cell: Arc::new(cell) }
+        Arc::new(cell)
     }
 
     pub fn process_messages(&self, self_ref: ActorRef, max_count: usize) -> usize {
@@ -123,6 +177,11 @@ impl ActorCell {
         self.try_with_inner_mut(|inner| { inner.dispatch(me); });
     }
 
+    pub fn enqueue_system_message(&self, me: ActorCellHandle, message: SystemMessage) {
+        self.mailbox.lock().push_system_message(message);
+        self.try_with_inner_mut(|inner| { inner.dispatch(me); });
+    }
+
     pub fn set_idle_or_dispatch(&self, me: ActorCellHandle) {
         let mailbox = self.mailbox.lock();
         self.with_inner_mut(|inner| if mailbox.is_empty() {
@@ -153,6 +212,10 @@ impl ActorCell {
         self.children.lock().insert(id, &actor_ref);
         actor_ref
     }
+
+    pub fn on_start(&self) {
+        self.inner.lock().on_start();
+    }
 }
 
 impl ActorCellInner {
@@ -161,7 +224,7 @@ impl ActorCellInner {
     }
 
     pub fn dispatch(&mut self, cell: ActorCellHandle) {
-        if self.status.is_scheduled() {
+        if !self.status.is_idle() {
             return;
         }
         self.set_status(ActorStatus::Scheduled);
@@ -174,7 +237,24 @@ impl ActorCellInner {
                 context::set_sender(sender);
                 self.actor.handle_any(inner)
             }
+            MailboxMessage::System(inner) => self.handle_system_message(inner),
         }
+    }
+
+    fn handle_system_message(&mut self, system_message: SystemMessage) {
+        match system_message {
+            SystemMessage::Stop(promise) => {
+                self.set_status(ActorStatus::Terminated);
+                self.actor.on_stop();
+                let _ = self.system.deregister_actor(&self.id);
+                promise.send(()).unwrap()
+            }
+        }
+    }
+
+
+    pub fn on_start(&mut self) {
+        self.actor.on_start();
     }
 
     pub fn set_status(&mut self, status: ActorStatus) {

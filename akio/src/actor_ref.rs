@@ -1,4 +1,4 @@
-use super::{ActorCellHandle, ActorChildren, AskActor, BaseActor, context};
+use super::{ActorCellHandle, ActorChildren, AskActor, BaseActor, context, SystemMessage};
 use futures::prelude::*;
 use futures::sync::oneshot;
 use std::any::Any;
@@ -14,7 +14,11 @@ impl ActorRef {
         Self { cell: cell }
     }
 
-    pub fn id(&self) -> &Uuid {
+    pub fn exists(&self) -> bool {
+        self.cell.exists()
+    }
+
+    pub fn id(&self) -> Uuid {
         self.cell.id()
     }
 
@@ -28,6 +32,10 @@ impl ActorRef {
 
     pub fn send_any_from(&self, message: Box<Any + Send>, sender: &ActorRef) {
         self.cell.enqueue_message(message, sender.clone())
+    }
+
+    fn system_send(&self, message: SystemMessage) {
+        self.cell.enqueue_system_message(message)
     }
 
     pub fn spawn<A>(&self, id: Uuid, actor: A) -> ActorRef
@@ -57,5 +65,11 @@ impl ActorRef {
               R: Any + Send
     {
         self.ask_any(Box::new(message))
+    }
+
+    pub fn stop(&self) -> oneshot::Receiver<()> {
+        let (promise, future) = oneshot::channel();
+        self.system_send(SystemMessage::Stop(promise));
+        future
     }
 }

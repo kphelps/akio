@@ -25,6 +25,7 @@ lazy_static! {
 
 enum ThreadMessage {
     ProcessActor(ActorCellHandle),
+    Stop(),
 }
 
 struct ThreadHandle {
@@ -35,7 +36,17 @@ struct ThreadHandle {
 
 impl ThreadHandle {
     pub fn join(self) {
+        self.send(ThreadMessage::Stop());
         self.handle.join().expect("Shutdown failed")
+    }
+
+    pub fn send(&self, message: ThreadMessage) {
+        let f = self.sender
+            .clone()
+            .send(message)
+            .map(|_| ())
+            .map_err(|_| ());
+        self.remote.execute(f).unwrap();
     }
 }
 
@@ -49,24 +60,18 @@ impl Dispatcher {
     }
 
     pub fn start(&mut self) {
-        println!("Starting: {:?}", *START);
+        let _ = *START;
         self.handles = self.create_threads();
     }
 
-    pub fn join(self) {
-        self.handles.into_iter().for_each(ThreadHandle::join)
+    pub fn join(&mut self) {
+        let handles = ::std::mem::replace(&mut self.handles, Vec::new());
+        handles.into_iter().for_each(ThreadHandle::join)
     }
 
     pub fn dispatch(&self, actor: ActorCellHandle) {
         let thread_handle = self.next_thread();
-
-        let f = thread_handle
-            .sender
-            .clone()
-            .send(ThreadMessage::ProcessActor(actor))
-            .map(|_| ())
-            .map_err(|_| ());
-        thread_handle.remote.execute(f).unwrap();
+        thread_handle.send(ThreadMessage::ProcessActor(actor));
     }
 
     #[cfg(target_os = "linux")]
@@ -128,17 +133,12 @@ impl DispatcherThread {
         let arc_remote = Arc::new(Mutex::new(None));
         let cloned_arc_remote = arc_remote.clone();
         let handle = thread::spawn(move || {
-            println!("Starting thread: {:?}", thread::current().id());
-            let stream = self.receiver
-                .for_each(|message| {
-                              handle_message(message);
-                              Ok(())
-                          });
+            let stream = self.receiver.for_each(|message| handle_message(message));
             let mut core = Core::new().expect("Failed to start dispatcher thread");
             let handle = core.handle();
             *cloned_arc_remote.lock().unwrap() = Some(core.remote());
             context::set_thread_context(context::ThreadContext { handle: handle });
-            core.run(stream).expect("Dispatcher failure");
+            let _ = core.run(stream);
         });
         // Need to extract the Remote from the new thread
         loop {
@@ -158,13 +158,8 @@ impl DispatcherThread {
         let arc_remote = Arc::new(Mutex::new(None));
         let cloned_arc_remote = arc_remote.clone();
         let handle = thread::spawn(move || {
-            println!("Starting thread: {:?}", thread::current().id());
             core_affinity::set_for_current(core_id);
-            let stream = self.receiver
-                .for_each(|message| {
-                              handle_message(message);
-                              Ok(())
-                          });
+            let stream = self.receiver.for_each(|message| handle_message(message));
             let mut core = Core::new().expect("Failed to start dispatcher thread");
             let handle = core.handle();
             *cloned_arc_remote.lock().unwrap() = Some(core.remote());
@@ -183,13 +178,15 @@ impl DispatcherThread {
     }
 }
 
-fn handle_message(message: ThreadMessage) {
+fn handle_message(message: ThreadMessage) -> Result<(), ()> {
     match message {
         ThreadMessage::ProcessActor(actor_cell) => {
             let n = actor_cell.process_messages(10);
             count(n);
             actor_cell.set_idle_or_dispatch();
+            Ok(())
         }
+        ThreadMessage::Stop() => Err(()),
     }
 }
 

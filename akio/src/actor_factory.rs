@@ -1,6 +1,7 @@
-use super::{ActorCell, ActorRef, ActorSystem, BaseActor};
+use super::{ActorCell, ActorCellHandle, ActorRef, ActorSystem, BaseActor};
 use std::collections::HashMap;
 use std::collections::hash_map;
+use std::sync::Arc;
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -28,7 +29,9 @@ impl ActorChildren {
 pub fn create_actor<A>(system: &ActorSystem, id: Uuid, actor: A) -> ActorRef
     where A: BaseActor + 'static
 {
-    let actor_cell = ActorCell::new(system.clone(), id, actor);
-    let actor_ref = ActorRef::new(actor_cell.clone());
-    actor_ref
+    let actor_cell_p = ActorCell::new(system.clone(), id, actor);
+    let handle = ActorCellHandle::new(Arc::downgrade(&actor_cell_p));
+    handle.on_start();
+    system.register_actor(id, actor_cell_p);
+    ActorRef::new(handle)
 }

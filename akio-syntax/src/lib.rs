@@ -17,6 +17,7 @@ pub fn actor_impl(_attribute: TokenStream, item: TokenStream) -> TokenStream {
     let source = item.to_string();
     let impl_ast = syn::parse_item(&source).unwrap();
     let tokens_out = actor::codegen_actor_impl(impl_ast);
+    //println!("{}", tokens_out);
     tokens_out.parse().unwrap()
 }
 

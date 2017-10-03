@@ -1,9 +1,13 @@
 #![feature(fnbox)]
 #![feature(proc_macro)]
 
+#![recursion_limit = "1024"]
+
 extern crate akio_syntax;
 #[cfg(target_os = "linux")]
 extern crate core_affinity;
+#[macro_use]
+extern crate error_chain;
 #[macro_use]
 extern crate futures;
 #[macro_use]
@@ -23,6 +27,7 @@ mod actor_system;
 mod ask_actor;
 pub mod context;
 mod dispatcher;
+pub mod errors;
 mod mailbox;
 pub mod prelude;
 
@@ -40,3 +45,4 @@ pub use context::ActorContext;
 use dispatcher::Dispatcher;
 use mailbox::Mailbox;
 use mailbox::MailboxMessage;
+use mailbox::SystemMessage;

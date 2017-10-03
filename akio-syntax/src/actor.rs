@@ -395,7 +395,7 @@ pub fn codegen_actor_impl(ast: syn::Item) -> quote::Tokens {
                 }
             }
         }
-        pub use #mod_name::#actor_ref_name;
+        pub use self::#mod_name::#actor_ref_name;
     }
 }
 
