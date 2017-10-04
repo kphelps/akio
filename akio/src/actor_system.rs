@@ -56,7 +56,7 @@ impl ActorSystem {
         self.inner.write().dispatcher.join()
     }
 
-    pub fn dispatch(&mut self, actor: ActorCellHandle) {
+    pub fn dispatch(&self, actor: ActorCellHandle) {
         self.inner.read().dispatch(actor);
     }
 

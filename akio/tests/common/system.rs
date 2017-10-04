@@ -2,12 +2,10 @@ use super::futures::future;
 use super::futures::sync::oneshot;
 use akio::prelude::*;
 
-pub fn with_actor_system_async<F, R>(f: F) -> R
+pub fn with_actor_system_async<F, R, U>(f: F) -> R
 where
-    F: FnOnce(ActorSystem)
-        -> Box<Future<Item = R, Error = ()> + Send + 'static>
-        + Send
-        + 'static,
+    F: FnOnce(ActorSystem) -> U + Send + 'static,
+    U: Future<Item = R, Error = ()> + Send + 'static,
     R: Send + 'static,
 {
     let mut system = ActorSystem::new();

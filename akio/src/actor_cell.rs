@@ -11,7 +11,9 @@ use super::{
     SystemMessage,
 };
 use super::errors::*;
-use parking_lot::Mutex;
+use futures::future;
+use futures::prelude::*;
+use parking_lot::{Mutex};
 use std::any::Any;
 use std::collections::VecDeque;
 use std::sync::{Arc, Weak};
@@ -127,16 +129,10 @@ impl ActorCellHandle {
 
 pub struct ActorCell {
     id: Uuid,
-    inner: Mutex<ActorCellInner>,
     mailbox: Mutex<Mailbox>,
     children: Mutex<ActorChildren>,
-    system: ActorSystem,
-}
-
-pub struct ActorCellInner {
-    id: Uuid,
-    status: ActorStatus,
-    actor: Box<BaseActor>,
+    status: Mutex<ActorStatus>,
+    actor: Mutex<Box<BaseActor>>,
     system: ActorSystem,
 }
 
@@ -146,19 +142,13 @@ impl ActorCell {
         A: BaseActor + 'static,
     {
         let mailbox = Mutex::new(Mailbox::new());
-        let inner = ActorCellInner {
-            id: id.clone(),
-            status: ActorStatus::Idle,
-            actor: Box::new(actor),
-            system: system.clone(),
-        };
-        let p_inner = Mutex::new(inner);
         let cell = Self {
             id: id,
-            inner: p_inner,
             mailbox: mailbox,
             children: Mutex::new(ActorChildren::new()),
-            system: system.clone(),
+            system: system,
+            status: Mutex::new(ActorStatus::Idle),
+            actor: Mutex::new(Box::new(actor)),
         };
         Arc::new(cell)
     }
@@ -166,11 +156,10 @@ impl ActorCell {
     pub fn process_messages(&self, self_ref: ActorRef, max_count: usize) -> usize {
         let message_batch = self.next_batch_to_process(max_count);
         let count = message_batch.len();
-        let mut inner = self.inner.lock();
-        inner.set_current_actor(self_ref);
+        self.set_current_actor(self_ref);
         message_batch
             .into_iter()
-            .for_each(|message| inner.process_message(message));
+            .for_each(|message| self.process_message(message));
         count
     }
 
@@ -188,43 +177,21 @@ impl ActorCell {
 
     pub fn enqueue_message(&self, me: ActorCellHandle, message: Box<Any + Send>, sender: ActorRef) {
         self.mailbox.lock().push(message, sender);
-        self.try_with_inner_mut(|inner| {
-            inner.dispatch(me);
-        });
+        self.dispatch(me);
     }
 
     pub fn enqueue_system_message(&self, me: ActorCellHandle, message: SystemMessage) {
         self.mailbox.lock().push_system_message(message);
-        self.try_with_inner_mut(|inner| {
-            inner.dispatch(me);
-        });
+        self.dispatch(me);
     }
 
     pub fn set_idle_or_dispatch(&self, me: ActorCellHandle) {
         let mailbox = self.mailbox.lock();
-        self.with_inner_mut(|inner| {
-            if mailbox.is_empty() {
-                inner.set_status(ActorStatus::Idle);
-            } else {
-                inner.system.dispatch(me)
-            }
-        });
-    }
-
-    fn with_inner_mut<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(&mut ActorCellInner) -> R,
-    {
-        let mut inner = self.inner.lock();
-        let x = f(&mut inner);
-        x
-    }
-
-    fn try_with_inner_mut<F, R>(&self, f: F) -> Option<R>
-    where
-        F: FnOnce(&mut ActorCellInner) -> R,
-    {
-        self.inner.try_lock().map(|mut inner| f(&mut inner))
+        if mailbox.is_empty() {
+            self.set_status(ActorStatus::Idle);
+        } else {
+            self.system.dispatch(me)
+        }
     }
 
     pub fn spawn<A>(&self, id: Uuid, actor: A) -> ActorRef
@@ -236,51 +203,48 @@ impl ActorCell {
         actor_ref
     }
 
-    pub fn on_start(&self) {
-        self.inner.lock().on_start();
-    }
-}
-
-impl ActorCellInner {
-    pub fn set_current_actor(&self, self_ref: ActorRef) {
+    fn set_current_actor(&self, self_ref: ActorRef) {
         context::set_current_actor(ActorContext::new(self_ref, self.system.clone()))
     }
 
-    pub fn dispatch(&mut self, cell: ActorCellHandle) {
-        if !self.status.is_idle() {
+    fn dispatch(&self, cell: ActorCellHandle) {
+        if !self.status.lock().is_idle() {
             return;
         }
         self.set_status(ActorStatus::Scheduled);
         self.system.dispatch(cell);
     }
 
-    fn process_message(&mut self, message: MailboxMessage) {
+    fn process_message(&self, message: MailboxMessage) {
         match message {
             MailboxMessage::User(inner, sender) => {
                 context::set_sender(sender);
-                self.actor.handle_any(inner)
+                self.actor.lock().handle_any(inner)
             }
             MailboxMessage::System(inner) => self.handle_system_message(inner),
         }
     }
 
-    fn handle_system_message(&mut self, system_message: SystemMessage) {
+    fn handle_system_message(&self, system_message: SystemMessage) {
         match system_message {
             SystemMessage::Stop(promise) => {
                 self.set_status(ActorStatus::Terminated);
-                self.actor.on_stop();
+                self.actor.lock().on_stop();
                 let _ = self.system.deregister_actor(&self.id);
-                promise.send(()).unwrap()
+                let children = self.children.lock().iter().cloned().collect::<Vec<ActorRef>>();
+                let lock_fs = children.into_iter().map(|ar| ar.stop());
+                let f = future::join_all(lock_fs)
+                    .map(move |_| promise.send(()).unwrap());
+                context::execute(f);
             }
         }
     }
 
-
-    pub fn on_start(&mut self) {
-        self.actor.on_start();
+    pub fn on_start(&self) {
+        self.actor.lock().on_start();
     }
 
-    pub fn set_status(&mut self, status: ActorStatus) {
-        self.status = status;
+    pub fn set_status(&self, status: ActorStatus) {
+        *self.status.lock() = status;
     }
 }
