@@ -21,13 +21,14 @@ pub fn handle() -> Handle {
 }
 
 pub fn execute<F>(f: F)
-    where F: Future<Item = (), Error = ()> + Send + 'static
+where
+    F: Future<Item = (), Error = ()> + Send + 'static,
 {
     let copied = with(ActorContext::clone);
     handle().spawn_fn(move || {
-                          set_current_actor(copied);
-                          f
-                      })
+        set_current_actor(copied);
+        f
+    })
 }
 
 task_local! {
@@ -35,13 +36,15 @@ task_local! {
 }
 
 pub fn with_mut<F, R>(f: F) -> R
-    where F: FnOnce(&mut ActorContext) -> R
+where
+    F: FnOnce(&mut ActorContext) -> R,
 {
     CURRENT_ACTOR.with(|ctx| f(ctx.borrow_mut().as_mut().unwrap()))
 }
 
 pub fn with<F, R>(f: F) -> R
-    where F: FnOnce(&ActorContext) -> R
+where
+    F: FnOnce(&ActorContext) -> R,
 {
     CURRENT_ACTOR.with(|ctx| f(ctx.borrow().as_ref().unwrap()))
 }

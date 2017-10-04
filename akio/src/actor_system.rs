@@ -1,6 +1,6 @@
 use super::{Actor, ActorCell, ActorCellHandle, ActorRef, Dispatcher};
-use super::errors::*;
 use super::actor_factory::create_actor;
+use super::errors::*;
 use parking_lot::RwLock;
 use std::boxed::FnBox;
 use std::collections::HashMap;
@@ -28,14 +28,17 @@ impl ActorSystem {
             root_actor: None,
             actors: HashMap::new(),
         };
-        let system = Self { inner: Arc::new(RwLock::new(inner)) };
+        let system = Self {
+            inner: Arc::new(RwLock::new(inner)),
+        };
         system.inner.write().root_actor =
             Some(create_actor(&system, Uuid::new_v4(), GuardianActor {}));
         system
     }
 
     pub fn on_startup<F>(&mut self, f: F)
-        where F: FnBox() + 'static + Send
+    where
+        F: FnBox() + 'static + Send,
     {
         let root_ref = self.root_actor();
         root_ref.send_from(GuardianMessage::Execute(Box::new(f)), &root_ref)

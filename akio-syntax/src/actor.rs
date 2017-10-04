@@ -1,7 +1,7 @@
-use syn;
-use quote;
 use inflector::Inflector;
+use quote;
 use std::collections::HashMap;
+use syn;
 
 struct ActorMessageMethod {
     method: syn::ImplItem,
@@ -9,7 +9,9 @@ struct ActorMessageMethod {
 
 impl ActorMessageMethod {
     pub fn new(item: syn::ImplItem) -> Self {
-        Self { method: item }
+        Self {
+            method: item,
+        }
     }
 
     fn variant_name(&self) -> syn::Ident {
@@ -54,19 +56,21 @@ impl ActorMessageMethod {
         method_call_idents
             .iter()
             .map(|ident| {
-                     syn::Expr {
-                         attrs: Vec::new(),
-                         node: syn::ExprKind::Path(None, syn::Path::from(ident.as_ref())),
-                     }
-                 })
+                syn::Expr {
+                    attrs: Vec::new(),
+                    node: syn::ExprKind::Path(None, syn::Path::from(ident.as_ref())),
+                }
+            })
             .collect()
     }
 
     fn method_call(&self) -> syn::Expr {
         syn::Expr {
-            node: syn::ExprKind::MethodCall(self.method_name(),
-                                            Vec::new(),
-                                            self.method_call_args()),
+            node: syn::ExprKind::MethodCall(
+                self.method_name(),
+                Vec::new(),
+                self.method_call_args(),
+            ),
             attrs: Vec::new(),
         }
     }
@@ -74,23 +78,27 @@ impl ActorMessageMethod {
     pub fn delegator(&self, message_name: syn::Ident) -> syn::Arm {
         let message_path = syn::Path {
             global: false,
-            segments: vec![syn::PathSegment {
-                               ident: message_name,
-                               parameters: syn::PathParameters::none(),
-                           },
-                           syn::PathSegment {
-                               ident: self.variant_name(),
-                               parameters: syn::PathParameters::none(),
-                           }],
+            segments: vec![
+                syn::PathSegment {
+                    ident: message_name,
+                    parameters: syn::PathParameters::none(),
+                },
+                syn::PathSegment {
+                    ident: self.variant_name(),
+                    parameters: syn::PathParameters::none(),
+                },
+            ],
         };
         let temp_idents = self.method_arg_names();
         let temp_pats = temp_idents
             .iter()
             .map(|ident| {
-                     syn::Pat::Ident(syn::BindingMode::ByValue(syn::Mutability::Immutable),
-                                     ident.clone(),
-                                     None)
-                 })
+                syn::Pat::Ident(
+                    syn::BindingMode::ByValue(syn::Mutability::Immutable),
+                    ident.clone(),
+                    None,
+                )
+            })
             .collect::<Vec<syn::Pat>>();
         let pattern = syn::Pat::TupleStruct(message_path, temp_pats, None);
         let method_call = self.method_call();
@@ -105,26 +113,26 @@ impl ActorMessageMethod {
 
     pub fn ref_methods(&self, message_enum_name: syn::Ident) -> quote::Tokens {
         let method_name = self.method_name();
-        let method_with_sender_name = syn::Ident::from(format!("{}_with_sender",
-                                                               method_name.as_ref()));
+        let method_with_sender_name =
+            syn::Ident::from(format!("{}_with_sender", method_name.as_ref()));
         let ask_method = syn::Ident::from(format!("ask_{}", method_name.as_ref()));
         let arg_names = &self.fields()
-                             .iter()
-                             .enumerate()
-                             .map(|(i, _)| format!("arg_{}", i))
-                             .map(syn::Ident::from)
-                             .collect::<Vec<syn::Ident>>();
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("arg_{}", i))
+            .map(syn::Ident::from)
+            .collect::<Vec<syn::Ident>>();
         let args = &arg_names
-                        .clone()
-                        .into_iter()
-                        .zip(self.fields())
-                        .map(|(arg_name, field)| {
-                                 syn::BareFnArg {
-                                     name: Some(arg_name),
-                                     ty: field.ty,
-                                 }
-                             })
-                        .collect::<Vec<syn::BareFnArg>>();
+            .clone()
+            .into_iter()
+            .zip(self.fields())
+            .map(|(arg_name, field)| {
+                syn::BareFnArg {
+                    name: Some(arg_name),
+                    ty: field.ty,
+                }
+            })
+            .collect::<Vec<syn::BareFnArg>>();
         let message_name = self.variant_name();
         quote! {
             pub fn #method_name(&self, #(#args),*)  {
@@ -158,21 +166,22 @@ impl ActorMessageMethod {
         let inputs = self.get_signature().decl.inputs;
         inputs
             .into_iter()
-            .filter_map(|input| match input {
-                            syn::FnArg::Captured(_, tipe) => Some(tipe),
-                            syn::FnArg::Ignored(tipe) => Some(tipe),
-                            _ => None,
-                        })
+            .filter_map(|input| {
+                match input {
+                    syn::FnArg::Captured(_, tipe) => Some(tipe),
+                    syn::FnArg::Ignored(tipe) => Some(tipe),
+                    _ => None,
+                }
+            })
             .map(|tipe| {
-                     syn::Field {
-                         ident: None,
-                         vis: syn::Visibility::Inherited,
-                         attrs: Vec::new(),
-                         ty: tipe,
-                     }
-                 })
+                syn::Field {
+                    ident: None,
+                    vis: syn::Visibility::Inherited,
+                    attrs: Vec::new(),
+                    ty: tipe,
+                }
+            })
             .collect()
-
     }
 
     fn get_signature(&self) -> syn::MethodSig {
@@ -240,18 +249,18 @@ impl ActorImpl {
         let mut message_methods = Vec::new();
         let mut hook_methods = HashMap::new();
         let mut rest = Vec::new();
-        impl_items
-            .into_iter()
-            .for_each(|item| if has_marker(&item, "actor_api") {
-                          message_methods.push(ActorMessageMethod::new(item));
-                      } else if HookType::has_marker(&item) {
-                          hook_methods
-                              .entry(HookType::get(&item).unwrap())
-                              .or_insert(Vec::new())
-                              .push(ActorMessageMethod::new(item))
-                      } else {
-                          rest.push(item);
-                      });
+        impl_items.into_iter().for_each(|item| {
+            if has_marker(&item, "actor_api") {
+                message_methods.push(ActorMessageMethod::new(item));
+            } else if HookType::has_marker(&item) {
+                hook_methods
+                    .entry(HookType::get(&item).unwrap())
+                    .or_insert(Vec::new())
+                    .push(ActorMessageMethod::new(item))
+            } else {
+                rest.push(item);
+            }
+        });
         Self {
             _generics: generics,
             tipe: tipe,
@@ -286,7 +295,9 @@ impl ActorImpl {
     fn ref_methods(&self) -> Vec<quote::Tokens> {
         self.message_methods
             .iter()
-            .map(|message_method| message_method.ref_methods(self.message_name()))
+            .map(|message_method| {
+                message_method.ref_methods(self.message_name())
+            })
             .collect()
     }
 
@@ -341,7 +352,10 @@ pub fn codegen_actor_impl(ast: syn::Item) -> quote::Tokens {
     let hook_methods = actor.hook_methods();
     let message_delegators = actor.message_delegators();
     let actor_impl = actor.actor_impl();
-    let mod_name = syn::Ident::from(format!("impl_module_{}", actor_name.as_ref().to_snake_case()));
+    let mod_name = syn::Ident::from(format!(
+        "impl_module_{}",
+        actor_name.as_ref().to_snake_case()
+    ));
     quote!{
         mod #mod_name {
             use std::ops::Deref;

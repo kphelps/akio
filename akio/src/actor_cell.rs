@@ -1,5 +1,15 @@
-use super::{ActorChildren, ActorContext, ActorRef, ActorSystem, BaseActor, context, create_actor,
-            Mailbox, MailboxMessage, SystemMessage};
+use super::{
+    context,
+    create_actor,
+    ActorChildren,
+    ActorContext,
+    ActorRef,
+    ActorSystem,
+    BaseActor,
+    Mailbox,
+    MailboxMessage,
+    SystemMessage,
+};
 use super::errors::*;
 use parking_lot::Mutex;
 use std::any::Any;
@@ -42,7 +52,9 @@ pub struct ActorCellHandle {
 
 impl ActorCellHandle {
     pub fn new(p_cell: Weak<ActorCell>) -> Self {
-        Self { cell: p_cell }
+        Self {
+            cell: p_cell,
+        }
     }
 
     pub fn exists(&self) -> bool {
@@ -78,13 +90,15 @@ impl ActorCellHandle {
     }
 
     pub fn spawn<A>(&self, id: Uuid, actor: A) -> ActorRef
-        where A: BaseActor + 'static
+    where
+        A: BaseActor + 'static,
     {
         self.with_cell_unwrapped(|cell| cell.spawn(id, actor))
     }
 
     pub fn with_children<F, R>(&self, f: F) -> R
-        where F: FnOnce(&ActorChildren) -> R
+    where
+        F: FnOnce(&ActorChildren) -> R,
     {
         self.with_cell_unwrapped(|cell| f(&cell.children.lock()))
     }
@@ -94,7 +108,8 @@ impl ActorCellHandle {
     }
 
     fn with_cell<F, R>(&self, f: F) -> Result<R>
-        where F: FnOnce(Arc<ActorCell>) -> R
+    where
+        F: FnOnce(Arc<ActorCell>) -> R,
     {
         match self.cell.upgrade() {
             Some(cell) => Ok(f(cell)),
@@ -103,7 +118,8 @@ impl ActorCellHandle {
     }
 
     fn with_cell_unwrapped<F, R>(&self, f: F) -> R
-        where F: FnOnce(Arc<ActorCell>) -> R
+    where
+        F: FnOnce(Arc<ActorCell>) -> R,
     {
         self.with_cell(f).expect("actor ref invalidated")
     }
@@ -126,7 +142,8 @@ pub struct ActorCellInner {
 
 impl ActorCell {
     pub fn new<A>(system: ActorSystem, id: Uuid, actor: A) -> Arc<ActorCell>
-        where A: BaseActor + 'static
+    where
+        A: BaseActor + 'static,
     {
         let mailbox = Mutex::new(Mailbox::new());
         let inner = ActorCellInner {
@@ -169,30 +186,34 @@ impl ActorCell {
         v
     }
 
-    pub fn enqueue_message(&self,
-                           me: ActorCellHandle,
-                           message: Box<Any + Send>,
-                           sender: ActorRef) {
+    pub fn enqueue_message(&self, me: ActorCellHandle, message: Box<Any + Send>, sender: ActorRef) {
         self.mailbox.lock().push(message, sender);
-        self.try_with_inner_mut(|inner| { inner.dispatch(me); });
+        self.try_with_inner_mut(|inner| {
+            inner.dispatch(me);
+        });
     }
 
     pub fn enqueue_system_message(&self, me: ActorCellHandle, message: SystemMessage) {
         self.mailbox.lock().push_system_message(message);
-        self.try_with_inner_mut(|inner| { inner.dispatch(me); });
+        self.try_with_inner_mut(|inner| {
+            inner.dispatch(me);
+        });
     }
 
     pub fn set_idle_or_dispatch(&self, me: ActorCellHandle) {
         let mailbox = self.mailbox.lock();
-        self.with_inner_mut(|inner| if mailbox.is_empty() {
-                                inner.set_status(ActorStatus::Idle);
-                            } else {
-                                inner.system.dispatch(me)
-                            });
+        self.with_inner_mut(|inner| {
+            if mailbox.is_empty() {
+                inner.set_status(ActorStatus::Idle);
+            } else {
+                inner.system.dispatch(me)
+            }
+        });
     }
 
     fn with_inner_mut<F, R>(&self, f: F) -> R
-        where F: FnOnce(&mut ActorCellInner) -> R
+    where
+        F: FnOnce(&mut ActorCellInner) -> R,
     {
         let mut inner = self.inner.lock();
         let x = f(&mut inner);
@@ -200,13 +221,15 @@ impl ActorCell {
     }
 
     fn try_with_inner_mut<F, R>(&self, f: F) -> Option<R>
-        where F: FnOnce(&mut ActorCellInner) -> R
+    where
+        F: FnOnce(&mut ActorCellInner) -> R,
     {
         self.inner.try_lock().map(|mut inner| f(&mut inner))
     }
 
     pub fn spawn<A>(&self, id: Uuid, actor: A) -> ActorRef
-        where A: BaseActor + 'static
+    where
+        A: BaseActor + 'static,
     {
         let actor_ref = create_actor(&self.system, id, actor);
         self.children.lock().insert(id, &actor_ref);

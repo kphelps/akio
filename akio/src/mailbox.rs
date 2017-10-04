@@ -18,7 +18,9 @@ pub struct Mailbox {
 
 impl Mailbox {
     pub fn new() -> Self {
-        Self { messages: VecDeque::new() }
+        Self {
+            messages: VecDeque::new(),
+        }
     }
 
     pub fn is_empty(&self) -> bool {

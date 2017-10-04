@@ -6,7 +6,9 @@ pub struct TestActor {
 
 impl TestActor {
     pub fn new() -> Self {
-        Self { test_method_calls: 0 }
+        Self {
+            test_method_calls: 0,
+        }
     }
 }
 

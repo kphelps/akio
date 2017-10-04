@@ -56,6 +56,8 @@ fn spawn_ping_loop() {
 
 pub fn main() {
     let mut system = ActorSystem::new();
-    system.on_startup(|| { iter::repeat(()).take(64).for_each(|_| spawn_ping_loop()); });
+    system.on_startup(|| {
+        iter::repeat(()).take(64).for_each(|_| spawn_ping_loop());
+    });
     system.start();
 }

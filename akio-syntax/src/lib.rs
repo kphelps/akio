@@ -1,5 +1,5 @@
 #![feature(proc_macro)]
-#![recursion_limit="128"]
+#![recursion_limit = "128"]
 
 extern crate inflector;
 extern crate proc_macro;

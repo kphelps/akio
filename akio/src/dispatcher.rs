@@ -1,19 +1,17 @@
+use super::{context, ActorCellHandle};
 #[cfg(target_os = "linux")]
 use core_affinity;
-
-#[cfg(not(target_os = "linux"))]
-use num_cpus;
-
-use super::{ActorCellHandle, context};
 use futures::future::Executor;
 use futures::prelude::*;
 use futures::sync::mpsc;
+#[cfg(not(target_os = "linux"))]
+use num_cpus;
 use rand;
 use rand::Rng;
 use std::iter;
 use std::sync::{Arc, Mutex};
-use std::thread;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::thread;
 use std::time::{Duration, Instant};
 use tokio_core::reactor::{Core, Remote};
 
@@ -56,7 +54,9 @@ pub struct Dispatcher {
 
 impl Dispatcher {
     pub fn new() -> Self {
-        Self { handles: Vec::new() }
+        Self {
+            handles: Vec::new(),
+        }
     }
 
     pub fn start(&mut self) {
@@ -126,7 +126,9 @@ struct DispatcherThread {
 
 impl DispatcherThread {
     pub fn new(receiver: mpsc::Receiver<ThreadMessage>) -> Self {
-        Self { receiver: receiver }
+        Self {
+            receiver: receiver,
+        }
     }
 
     pub fn run(self) -> (Remote, thread::JoinHandle<()>) {
@@ -137,7 +139,9 @@ impl DispatcherThread {
             let mut core = Core::new().expect("Failed to start dispatcher thread");
             let handle = core.handle();
             *cloned_arc_remote.lock().unwrap() = Some(core.remote());
-            context::set_thread_context(context::ThreadContext { handle: handle });
+            context::set_thread_context(context::ThreadContext {
+                handle: handle,
+            });
             let _ = core.run(stream);
         });
         // Need to extract the Remote from the new thread
@@ -152,9 +156,10 @@ impl DispatcherThread {
     }
 
     #[cfg(target_os = "linux")]
-    pub fn run_with_affinity(self,
-                             core_id: core_affinity::CoreId)
-                             -> (Remote, thread::JoinHandle<()>) {
+    pub fn run_with_affinity(
+        self,
+        core_id: core_affinity::CoreId,
+    ) -> (Remote, thread::JoinHandle<()>) {
         let arc_remote = Arc::new(Mutex::new(None));
         let cloned_arc_remote = arc_remote.clone();
         let handle = thread::spawn(move || {
@@ -163,7 +168,9 @@ impl DispatcherThread {
             let mut core = Core::new().expect("Failed to start dispatcher thread");
             let handle = core.handle();
             *cloned_arc_remote.lock().unwrap() = Some(core.remote());
-            context::set_thread_context(context::ThreadContext { handle: handle });
+            context::set_thread_context(context::ThreadContext {
+                handle: handle,
+            });
             core.run(stream).expect("Dispatcher failure");
         });
         // Need to extract the Remote from the new thread

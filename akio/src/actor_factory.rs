@@ -11,7 +11,9 @@ pub struct ActorChildren {
 
 impl ActorChildren {
     pub fn new() -> Self {
-        Self { actor_refs: HashMap::new() }
+        Self {
+            actor_refs: HashMap::new(),
+        }
     }
 
     pub fn iter(&self) -> hash_map::Values<Uuid, ActorRef> {
@@ -27,7 +29,8 @@ impl ActorChildren {
 }
 
 pub fn create_actor<A>(system: &ActorSystem, id: Uuid, actor: A) -> ActorRef
-    where A: BaseActor + 'static
+where
+    A: BaseActor + 'static,
 {
     let actor_cell_p = ActorCell::new(system.clone(), id, actor);
     let handle = ActorCellHandle::new(Arc::downgrade(&actor_cell_p));

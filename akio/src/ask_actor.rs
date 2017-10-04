@@ -7,12 +7,15 @@ pub struct AskActor<T> {
 
 impl<T> AskActor<T> {
     pub fn new(promise: oneshot::Sender<T>) -> Self {
-        Self { promise: Some(promise) }
+        Self {
+            promise: Some(promise),
+        }
     }
 }
 
 impl<T> Actor for AskActor<T>
-    where T: 'static
+where
+    T: 'static,
 {
     type Message = T;
 

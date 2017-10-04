@@ -1,4 +1,4 @@
-use super::{ActorCellHandle, ActorChildren, AskActor, BaseActor, context, SystemMessage};
+use super::{context, ActorCellHandle, ActorChildren, AskActor, BaseActor, SystemMessage};
 use futures::prelude::*;
 use futures::sync::oneshot;
 use std::any::Any;
@@ -11,7 +11,9 @@ pub struct ActorRef {
 
 impl ActorRef {
     pub fn new(cell: ActorCellHandle) -> Self {
-        Self { cell: cell }
+        Self {
+            cell: cell,
+        }
     }
 
     pub fn exists(&self) -> bool {
@@ -39,19 +41,22 @@ impl ActorRef {
     }
 
     pub fn spawn<A>(&self, id: Uuid, actor: A) -> ActorRef
-        where A: BaseActor + 'static
+    where
+        A: BaseActor + 'static,
     {
         self.cell.spawn(id, actor)
     }
 
     pub fn with_children<F, R>(&self, f: F) -> R
-        where F: FnOnce(&ActorChildren) -> R
+    where
+        F: FnOnce(&ActorChildren) -> R,
     {
         self.cell.with_children(f)
     }
 
     pub fn ask_any<T>(&self, message: Box<Any + Send>) -> Box<Future<Item = T, Error = ()> + Send>
-        where T: Send + 'static
+    where
+        T: Send + 'static,
     {
         let (promise, f) = oneshot::channel();
         let id = Uuid::new_v4();
@@ -61,8 +66,9 @@ impl ActorRef {
     }
 
     pub fn ask<T, R>(&self, message: R) -> Box<Future<Item = T, Error = ()> + Send>
-        where T: Send + 'static,
-              R: Any + Send
+    where
+        T: Send + 'static,
+        R: Any + Send,
     {
         self.ask_any(Box::new(message))
     }

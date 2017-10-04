@@ -1,6 +1,5 @@
 #![feature(fnbox)]
 #![feature(proc_macro)]
-
 #![recursion_limit = "1024"]
 
 extern crate akio_syntax;

@@ -1,4 +1,4 @@
-use super::{ActorChildren, ActorRef, context};
+use super::{context, ActorChildren, ActorRef};
 use std::any::Any;
 use uuid::Uuid;
 
@@ -20,7 +20,8 @@ pub trait Actor {
     fn on_stop_impl(&mut self) {}
 
     fn with_children<F, R>(&self, f: F) -> R
-        where F: FnOnce(&ActorChildren) -> R
+    where
+        F: FnOnce(&ActorChildren) -> R,
     {
         context::with(|ctx| ctx.self_ref.with_children(f))
     }
@@ -39,7 +40,8 @@ pub trait Actor {
 }
 
 impl<T> BaseActor for T
-    where T: Actor + Send
+where
+    T: Actor + Send,
 {
     fn handle_any(&mut self, any_message: Box<Any + Send>) {
         match any_message.downcast() {
@@ -66,10 +68,11 @@ pub trait TypedActor {
 }
 
 pub fn spawn<T>(id: Uuid, actor: T) -> T::RefType
-    where T: Actor + TypedActor + Send + 'static
+where
+    T: Actor + TypedActor + Send + 'static,
 {
     context::with_mut(|ctx| {
-                          let actor_ref = ctx.self_ref.spawn(id, actor);
-                          T::from_ref(actor_ref)
-                      })
+        let actor_ref = ctx.self_ref.spawn(id, actor);
+        T::from_ref(actor_ref)
+    })
 }
