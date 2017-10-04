@@ -1,3 +1,4 @@
+#![feature(conservative_impl_trait)]
 #![feature(proc_macro)]
 extern crate akio;
 

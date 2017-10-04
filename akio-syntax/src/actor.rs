@@ -152,7 +152,7 @@ impl ActorMessageMethod {
                 );
             }
 
-            pub fn #ask_method<T>(&self, #(#args,)*) -> Box<Future<Item = T, Error = ()> + Send>
+            pub fn #ask_method<T>(&self, #(#args,)*) -> impl Future<Item = T, Error = ()>
                 where T: Send + 'static
             {
                 self.inner.ask::<T, #message_enum_name>(

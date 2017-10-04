@@ -1,3 +1,4 @@
+#![feature(conservative_impl_trait)]
 #![feature(fnbox)]
 #![feature(proc_macro)]
 #![recursion_limit = "1024"]

@@ -54,7 +54,7 @@ impl ActorRef {
         self.cell.with_children(f)
     }
 
-    pub fn ask_any<T>(&self, message: Box<Any + Send>) -> Box<Future<Item = T, Error = ()> + Send>
+    pub fn ask_any<T>(&self, message: Box<Any + Send>) -> impl Future<Item = T, Error = ()>
     where
         T: Send + 'static,
     {
@@ -62,10 +62,10 @@ impl ActorRef {
         let id = Uuid::new_v4();
         let ask_ref = self.spawn(id, AskActor::new(promise));
         self.send_any_from(message, &ask_ref);
-        Box::new(f.map_err(|_| ()))
+        f.map_err(|_| ())
     }
 
-    pub fn ask<T, R>(&self, message: R) -> Box<Future<Item = T, Error = ()> + Send>
+    pub fn ask<T, R>(&self, message: R) -> impl Future<Item = T, Error = ()>
     where
         T: Send + 'static,
         R: Any + Send,
@@ -73,9 +73,9 @@ impl ActorRef {
         self.ask_any(Box::new(message))
     }
 
-    pub fn stop(&self) -> oneshot::Receiver<()> {
+    pub fn stop(&self) -> impl Future<Item = (), Error = ()> {
         let (promise, future) = oneshot::channel();
         self.system_send(SystemMessage::Stop(promise));
-        future
+        future.map_err(|_| ())
     }
 }
