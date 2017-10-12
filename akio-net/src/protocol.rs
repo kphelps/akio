@@ -30,7 +30,7 @@ pub(crate) fn initialize_stream<T>(
     handle: &Handle,
     client_event_sender: mpsc::Sender<ClientEvent>
 ) -> T
-    where T: ClientState
+    where T: ClientState + 'static
 {
     let framed = bind_transport(stream);
     let (raw_sender, raw_receiver) = framed.split();
@@ -50,11 +50,12 @@ pub(crate) fn initialize_stream<T>(
         .map(move |message| ClientEvent::MessageReceived(client_id, message))
         .map_err(|_| ());
     let socket_read_stream = client_event_sender.clone().sink_map_err(|_| ()).send_all(from_socket_stream);
-    handle.spawn(socket_read_stream.map(|_| ()));
-
     let sender = raw_sender.sink_map_err(|_| ()).send_all(to_socket.map(serialize_message));
-    handle.spawn(sender.map(|_| ()));
-    // TODO select both futures + handle disconnect
+    let disconnect_message = client.disconnected_event();
+    let connection = sender.map(|_| ()).select(socket_read_stream.map(|_| ())).then(move |_| {
+        client_event_sender.clone().send(disconnect_message).map(|_| ()).map_err(|_| ())
+    });
 
+    handle.spawn(connection);
     client
 }

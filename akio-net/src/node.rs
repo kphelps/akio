@@ -71,18 +71,22 @@ impl RemoteNodeInner {
     }
 
     pub fn client_rx_connected(&self, client_id: ClientId, state: ClientRxState) {
+        println!("[{}] rx connnected", client_id);
         self.with_client(client_id, |client| client.rx = Some(state))
     }
 
     pub fn client_rx_disconnected(&self, client_id: ClientId) {
+        println!("[{}] rx disconnnected", client_id);
         self.with_client(client_id, |client| client.rx = None)
     }
 
     pub fn client_tx_connected(&self, client_id: ClientId, state: ClientTxState) {
+        println!("[{}] tx connnected", client_id);
         self.with_client(client_id, |client| client.tx = Some(state))
     }
 
     pub fn client_tx_disconnected(&self, client_id: ClientId) {
+        println!("[{}] tx disconnnected", client_id);
         self.with_client(client_id, |client| client.tx = None)
     }
 
