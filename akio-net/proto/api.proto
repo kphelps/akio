@@ -1,13 +1,36 @@
 syntax = "proto3";
 
-service HelloService {
-  rpc SayHello (HelloRequest) returns (HelloResponse);
+import "rustproto.proto";
+
+option (rustproto.carllerche_bytes_for_bytes_all) = true;
+option (rustproto.carllerche_bytes_for_string_all) = true;
+option (rustproto.expose_oneof_all) = true;
+
+message Request {
+    uint64 id = 1;
+    oneof payload {
+        StartHandshake start_handshake = 2;
+    }
 }
 
-message HelloRequest {
-  string greeting = 1;
+message Response {
+    uint64 id = 1;
+    ErrorCode error = 2;
+    oneof payload {
+        FinishHandshake finish_handshake = 3;
+    }
 }
 
-message HelloResponse {
-  string reply = 1;
+enum ErrorCode {
+    NONE = 0;
+}
+
+message StartHandshake {
+    bytes client_id = 1;
+    string address = 2;
+    uint32 port = 3;
+}
+
+message FinishHandshake {
+    bytes client_id = 1;
 }

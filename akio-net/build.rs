@@ -1,10 +1,9 @@
-extern crate protoc_rust_grpc;
+extern crate protoc_rust;
 
 fn main() {
-    protoc_rust_grpc::run(protoc_rust_grpc::Args {
+    protoc_rust::run(protoc_rust::Args {
         out_dir: "src/rpc",
         includes: &["proto"],
-        input: &["proto/api.proto"],
-        rust_protobuf: true,
-    }).expect("protoc-rust-grpc");
+        input: &["proto/api.proto"]
+    }).expect("protoc-rust");
 }
