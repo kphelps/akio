@@ -2,6 +2,7 @@
 name = "akio"
 version = "0.1.0"
 authors = ["Kyle Phelps <kphelps@salsify.com>"]
+license = "Apache-2.0"
 
 [dependencies]
 akio-syntax = { path = "../akio-syntax" }
