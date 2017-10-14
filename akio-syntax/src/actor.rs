@@ -360,6 +360,7 @@ pub fn codegen_actor_impl(ast: syn::Item) -> quote::Tokens {
         mod #mod_name {
             use std::ops::Deref;
 
+            #[derive(Clone)]
             pub struct #actor_ref_name {
                 inner: ActorRef,
             }
