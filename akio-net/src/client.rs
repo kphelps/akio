@@ -1,5 +1,3 @@
-use super::client_state::ClientTxState;
-use super::errors::*;
 use super::ipc::*;
 use super::protocol::initialize_tx_stream;
 use futures::prelude::*;

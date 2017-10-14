@@ -1,4 +1,3 @@
-use super::client_state::ClientRxState;
 use super::errors::*;
 use super::ipc::*;
 use super::protocol::initialize_rx_stream;

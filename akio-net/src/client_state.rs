@@ -148,14 +148,22 @@ impl ClientState for ClientTxState {
 
 impl ClientTxState {
     pub fn make_request(payload: rpc::Request_oneof_payload) -> rpc::Request {
+        Self::make_request_raw(Some(payload))
+    }
+
+    pub fn make_request_raw(payload: Option<rpc::Request_oneof_payload>) -> rpc::Request {
         let mut request = rpc::Request::new();
         request.set_id(rand::thread_rng().next_u64());
-        request.payload = Some(payload);
+        request.payload = payload;
         request
     }
 
     pub fn request(&self, payload: rpc::Request_oneof_payload) -> impl Future<Item = (), Error = ()> {
-        let request = Self::make_request(payload);
+        self.request_raw(Some(payload))
+    }
+
+    pub fn request_raw(&self, payload: Option<rpc::Request_oneof_payload>) -> impl Future<Item = (), Error = ()> {
+        let request = Self::make_request_raw(payload);
         self.inner.tx.clone().send(request).map(|_| ()).map_err(|_| ())
     }
 }

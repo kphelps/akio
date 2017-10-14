@@ -127,7 +127,7 @@ fn when_connected<T, S, R>(
     let recv_client = client.clone();
     let from_socket_stream = receiver
         .map(move |message| recv_client.on_receive(message))
-        .map_err(|err| println!("Recv error: {}", err));
+        .map_err(move |err| error!("[{}] Recv error: {}", client_id, err));
     let socket_read_stream = client_event_sender.clone().sink_map_err(|_| ()).send_all(from_socket_stream);
     let send_stream = sender.send_all(to_socket);
     let disconnect_message = client.disconnected_event();
