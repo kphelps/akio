@@ -5,8 +5,8 @@ use super::client_state::*;
 use super::server::{start_server, Server};
 use super::errors::*;
 use futures::prelude::*;
-use futures::sync::mpsc;
-use std::collections::HashMap;
+use futures::sync::{mpsc, oneshot};
+use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -97,6 +97,7 @@ struct RemoteConnection {
     rx: ConnectionState<ClientRxState>,
     tx: ConnectionState<ClientTxState>,
     handle: Handle,
+    pending_requests: HashMap<u64, oneshot::Sender<rpc::Response>>,
 }
 
 impl RemoteConnection {
@@ -106,6 +107,7 @@ impl RemoteConnection {
             rx: ConnectionState::Disconnected,
             tx: ConnectionState::Disconnected,
             handle: handle.clone(),
+            pending_requests: HashMap::new(),
         }
     }
 
@@ -121,16 +123,40 @@ impl RemoteConnection {
         }
     }
 
-    pub fn request(&self, payload: rpc::Request_oneof_payload) {
-        self.request_raw(Some(payload))
+    pub fn request(&mut self, payload: rpc::Request_oneof_payload)
+        -> Option<oneshot::Receiver<rpc::Response>>
+    {
+        self.request_oneway(payload)
+            .map(|id| {
+                let (promise, future) = oneshot::channel();
+                self.pending_requests.insert(id, promise);
+                future
+            })
     }
 
-    pub fn request_raw(&self, payload: Option<rpc::Request_oneof_payload>) {
-        let maybe_f = self.tx.state().map(|client| client.request_raw(payload));
-        match maybe_f {
-            Some(f) => self.handle.spawn(f),
-            None => error!("[{}] Failed to send request", self.client_id),
+    pub fn request_oneway(&self, payload: rpc::Request_oneof_payload) -> Option<u64> {
+        let maybe_id = self.request_raw(Some(payload));
+        if maybe_id.is_none() {
+            error!("[{}] Failed to send request", self.client_id);
         }
+        maybe_id
+    }
+
+    pub fn request_raw(&self, payload: Option<rpc::Request_oneof_payload>) -> Option<u64> {
+        self.tx.state()
+            .map(|client| client.request_raw(payload))
+            .map(|(id, f)| {
+                self.handle.spawn(f);
+                id
+            })
+    }
+
+    pub fn handle_response(&mut self, response: rpc::Response) {
+        let _ = self.pending_requests
+            .remove(&response.id)
+            .map(|promise| {
+                let _ = promise.send(response);
+            });
     }
 }
 
@@ -211,13 +237,16 @@ impl RemoteNodeInner {
     }
 
     pub fn handle_response(&self, client_id: ClientId, response: rpc::Response) {
-        debug!("[{}] response: {:?}", client_id, response)
+        debug!("[{}] response: {:?}", client_id, response);
+        self.with_client(client_id, |client| client.handle_response(response));
     }
 
     pub fn send_heartbeats(&self) {
         let clients = self.client_states.lock();
-        clients.iter().for_each(|(_, client)| {
-            client.request_raw(None)
+        clients.iter().for_each(|(id, client)| {
+            if client.request_raw(None).is_none() {
+                warn!("[{}] Heartbeat failed", id);
+            }
         });
     }
 }
