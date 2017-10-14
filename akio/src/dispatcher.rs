@@ -171,7 +171,7 @@ impl DispatcherThread {
             context::set_thread_context(context::ThreadContext {
                 handle: handle,
             });
-            core.run(stream).expect("Dispatcher failure");
+            let _ = core.run(stream);
         });
         // Need to extract the Remote from the new thread
         loop {

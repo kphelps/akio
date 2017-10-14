@@ -1,3 +1,7 @@
 language: rust
 rust:
   - nightly
+cache: cargo
+before_install:
+  - ./.travis/install-protobuf.sh
+sudo: required
