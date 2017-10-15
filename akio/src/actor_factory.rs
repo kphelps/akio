@@ -1,10 +1,8 @@
 use super::{Actor, ActorCell, ActorCellHandle, ActorRef, ActorSystem};
-use std::collections::HashMap;
-use std::collections::hash_map;
 use std::sync::Arc;
 use uuid::Uuid;
 
-pub fn create_actor<A>(system: &ActorSystem, id: Uuid, actor: A) -> ActorRef
+pub fn create_actor<A>(system: ActorSystem, id: Uuid, actor: A) -> ActorRef<A>
 where
     A: Actor + 'static,
 {

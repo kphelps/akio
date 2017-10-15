@@ -13,9 +13,16 @@ impl<T> AskActor<T> {
     }
 }
 
-impl<T> Actor for AskActor<T> {}
+impl<T> Actor for AskActor<T>
+    where T: Send + 'static
+{
+}
 
-impl<T> MessageHandler<T> for AskActor<T> {
+impl<T> MessageHandler<T> for AskActor<T>
+    where T: Send + 'static
+{
+    type Response = ();
+
     fn handle(&mut self, message: T) {
         let promise = ::std::mem::replace(&mut self.promise, None);
         match promise.unwrap().send(message) {

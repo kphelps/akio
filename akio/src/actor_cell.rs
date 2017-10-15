@@ -1,18 +1,18 @@
 use super::{
-    context,
     create_actor,
     Actor,
     ActorRef,
     ActorSystem,
     Mailbox,
     MailboxMessage,
+    MessageHandler,
     SystemMessage,
 };
 use super::errors::*;
-use futures::future;
 use futures::prelude::*;
 use parking_lot::{Mutex};
 use std::any::Any;
+use std::clone::Clone;
 use std::collections::VecDeque;
 use std::sync::{Arc, Weak};
 use uuid::Uuid;
@@ -43,11 +43,18 @@ impl ActorStatus {
     }
 }
 
-#[derive(Clone)]
-pub struct ActorCellHandle<A> {
+pub(crate) struct ActorCellHandle<A> {
     // ActorSystem holds the only RCs. When the actor is stopped the pointer
     // will fail to upgrade.
     cell: Weak<ActorCell<A>>,
+}
+
+impl<A> Clone for ActorCellHandle<A>
+    where A: Actor
+{
+    fn clone(&self) -> Self {
+        Self::new(self.cell.clone())
+    }
 }
 
 impl<A> ActorCellHandle<A>
@@ -72,8 +79,9 @@ impl<A> ActorCellHandle<A>
         self.with_cell_unwrapped(|cell| cell.process_messages(self_ref, max_count))
     }
 
-    pub fn enqueue_message(&self, message: Box<Any + Send>)
-        where B: Actor
+    pub fn enqueue_message<M>(&self, message: M)
+        where A: MessageHandler<M>,
+              M: Send + 'static,
     {
         let me = self.clone();
         if let Err(e) = self.with_cell(|cell| cell.enqueue_message(me, message)) {
@@ -91,13 +99,6 @@ impl<A> ActorCellHandle<A>
     pub fn set_idle_or_dispatch(&self) {
         let me = self.clone();
         let _ = self.with_cell(|cell| cell.set_idle_or_dispatch(me));
-    }
-
-    pub fn spawn<B>(&self, id: Uuid, actor: B) -> ActorRef<B>
-    where
-        B: Actor,
-    {
-        self.with_cell_unwrapped(|cell| cell.spawn(id, actor))
     }
 
     pub fn on_start(&self) {
@@ -122,15 +123,17 @@ impl<A> ActorCellHandle<A>
     }
 }
 
-pub struct ActorCell<A> {
+pub(crate) struct ActorCell<A> {
     id: Uuid,
-    mailbox: Mutex<Mailbox>,
+    mailbox: Mutex<Mailbox<A>>,
     status: Mutex<ActorStatus>,
     actor: Mutex<A>,
     system: ActorSystem,
 }
 
-impl<A> ActorCell<Actor> {
+impl<A> ActorCell<A>
+    where A: Actor
+{
     pub fn new(system: ActorSystem, id: Uuid, actor: A) -> Arc<ActorCell<A>>
     {
         let mailbox = Mutex::new(Mailbox::new());
@@ -139,7 +142,7 @@ impl<A> ActorCell<Actor> {
             mailbox: mailbox,
             system: system,
             status: Mutex::new(ActorStatus::Idle),
-            actor: Mutex::new(Box::new(actor)),
+            actor: Mutex::new(actor),
         };
         Arc::new(cell)
     }
@@ -153,7 +156,7 @@ impl<A> ActorCell<Actor> {
         count
     }
 
-    pub fn next_batch_to_process(&self, count: usize) -> VecDeque<MailboxMessage> {
+    pub fn next_batch_to_process(&self, count: usize) -> VecDeque<MailboxMessage<A>> {
         let mut mailbox = self.mailbox.lock();
         let mut v = VecDeque::with_capacity(count);
         for _ in 0..count {
@@ -165,8 +168,9 @@ impl<A> ActorCell<Actor> {
         v
     }
 
-    pub fn enqueue_message(&self, me: ActorCellHandle<A>, message: Box<Any + Send>)
-        where B: Actor
+    pub fn enqueue_message<M>(&self, me: ActorCellHandle<A>, message: M)
+        where A: MessageHandler<M>,
+              M: Send + 'static
     {
         self.mailbox.lock().push(message);
         self.dispatch(me);
@@ -186,13 +190,6 @@ impl<A> ActorCell<Actor> {
         }
     }
 
-    pub fn spawn<B>(&self, id: Uuid, actor: B) -> ActorRef<B>
-    where
-        B: Actor,
-    {
-        create_actor(&self.system, id, actor)
-    }
-
     fn dispatch(&self, cell: ActorCellHandle<A>) {
         if !self.status.lock().is_idle() {
             return;
@@ -201,10 +198,11 @@ impl<A> ActorCell<Actor> {
         self.system.dispatch(cell);
     }
 
-    fn process_message(&self, message: MailboxMessage) {
+    fn process_message(&self, message: MailboxMessage<A>)
+    {
         match message {
-            MailboxMessage::User(inner) => {
-                self.actor.lock().handle_any(inner)
+            MailboxMessage::User(mut inner) => {
+                inner.handle(&mut self.actor.lock())
             }
             MailboxMessage::System(inner) => self.handle_system_message(inner),
         }
@@ -215,7 +213,7 @@ impl<A> ActorCell<Actor> {
             SystemMessage::Stop(promise) => {
                 self.set_status(ActorStatus::Terminated);
                 self.actor.lock().on_stop();
-                let _ = self.system.deregister_actor(&self.id);
+                let _ = self.system.deregister_actor::<A>(&self.id);
             }
         }
     }

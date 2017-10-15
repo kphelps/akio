@@ -6,18 +6,21 @@ extern crate akio;
 use akio::prelude::*;
 use std::iter;
 
-struct PongActor {}
+struct PongActor {
+    ping: ActorRef<PingActor>,
+}
 
 #[actor_impl]
 impl PongActor {
-    #[actor_api]
-    pub fn ping(&mut self) {
-        self.sender::<PingActor>().pong()
+    pub fn new(ping: ActorRef<PingActor>) -> Self {
+        Self {
+            ping: ping
+        }
     }
 
     #[actor_api]
-    pub fn ping_n(&mut self, n: u64) {
-        println!("{}", n);
+    pub fn ping(&mut self) {
+        self.ping.pong();
     }
 
     #[on_start]
@@ -27,32 +30,64 @@ impl PongActor {
     fn log_shutdown(&self) {}
 }
 
-struct PingActor {}
+//#[derive(Actor)]
+struct PingActor {
+    pong: Option<ActorRef<PongActor>>
+}
+
+//#[actor_api(PingActor)]
+//handler pong(&mut self) {
+
+//}
+
+//struct PongMessage {
+    //inner: String,
+//}
+
+//impl MessageHandler<PongMessage> for PingActor {
+    //type Response = ();
+
+    //fn handle(&mut self, message: PongMessage) {
+        //self.pong.map(|pong| pong.ping());
+    //}
+//}
 
 #[actor_impl]
 impl PingActor {
+    pub fn new() -> Self {
+        Self {
+            pong: None,
+        }
+    }
+
+    #[actor_api]
+    pub fn initialize(&mut self, pong: ActorRef<PongActor>) {
+        self.pong = Some(pong);
+    }
+
     #[actor_api]
     pub fn pong(&mut self) {
-        self.sender::<PongActor>().ping()
+        self.pong.as_ref().map(|pong| pong.ping());
     }
 
-    #[on_start]
-    fn on_start(&self) {
-        println!("Starting ping!");
-    }
+    //#[on_start]
+    //fn on_start(&self) {
+        //println!("Starting ping!");
+    //}
 
-    #[on_stop]
-    fn on_stop(&self) {
-        println!("Stopping ping!");
-    }
+    //#[on_stop]
+    //fn on_stop(&self) {
+        //println!("Stopping ping!");
+    //}
 }
 
 fn spawn_ping_loop() {
-    let pong = spawn(Uuid::new_v4(), PongActor {});
-    let ping = spawn(Uuid::new_v4(), PingActor {});
+    let ping = PingActor::new().start();
+    let pong = PongActor::new(ping.clone()).start();
+    ping.initialize(pong.clone());
     iter::repeat(())
         .take(20)
-        .for_each(|_| pong.ping_with_sender(&ping));
+        .for_each(|_| pong.ping());
 }
 
 pub fn main() {

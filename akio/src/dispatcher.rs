@@ -1,4 +1,4 @@
-use super::{context, Actor, ActorCellHandle};
+use super::{context, Actor, ActorCellHandle, ActorSystem};
 #[cfg(target_os = "linux")]
 use core_affinity;
 use futures::future::Executor;
@@ -8,7 +8,6 @@ use futures::sync::mpsc;
 use num_cpus;
 use rand;
 use rand::Rng;
-use std::iter;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
@@ -26,20 +25,16 @@ enum ThreadMessage {
     Stop(),
 }
 
-trait ActorProcessor {
-    fn process(self) -> usize;
+trait ActorProcessor: Send + 'static {
+    fn process(&self) -> usize;
 }
 
-struct ActorProcessorContext<T> {
-    handle: ActorCellHandle<T>
-}
-
-impl<T> ActorProcessor for ActorProcessorContext<T>
-    where T: Actor
+impl<T> ActorProcessor for ActorCellHandle<T>
+    where T: Actor + Send
 {
-    fn process(self) -> usize {
-        let n = actor_cell.process_messages(10);
-        actor_cell.set_idle_or_dispatch();
+    fn process(&self) -> usize {
+        let n = self.process_messages(10);
+        self.set_idle_or_dispatch();
         n
     }
 }
@@ -66,7 +61,7 @@ impl ThreadHandle {
     }
 }
 
-pub struct Dispatcher {
+pub(crate) struct Dispatcher {
     handles: Vec<ThreadHandle>,
 }
 
@@ -77,9 +72,9 @@ impl Dispatcher {
         }
     }
 
-    pub fn start(&mut self) {
+    pub fn start(&mut self, system: ActorSystem) {
         let _ = *START;
-        self.handles = self.create_threads();
+        self.handles = self.create_threads(system);
     }
 
     pub fn join(&mut self) {
@@ -91,22 +86,22 @@ impl Dispatcher {
         where T: Actor
     {
         let thread_handle = self.next_thread();
-        thread_handle.send(ThreadMessage::ProcessActor(actor));
+        thread_handle.send(ThreadMessage::ProcessActor(Box::new(actor)));
     }
 
     #[cfg(target_os = "linux")]
-    fn create_threads(&self) -> Vec<ThreadHandle> {
+    fn create_threads(&self, system: ActorSystem) -> Vec<ThreadHandle> {
         core_affinity::get_core_ids()
             .unwrap()
             .into_iter()
-            .map(|core_id| self.create_thread(core_id))
+            .map(|core_id| self.create_thread(core_id, system.clone()))
             .collect::<Vec<ThreadHandle>>()
     }
 
     #[cfg(target_os = "linux")]
-    fn create_thread(&self, core_id: core_affinity::CoreId) -> ThreadHandle {
+    fn create_thread(&self, core_id: core_affinity::CoreId, system: ActorSystem) -> ThreadHandle {
         let (sender, receiver) = mpsc::channel(100);
-        let (remote, handle) = DispatcherThread::new(receiver).run_with_affinity(core_id);
+        let (remote, handle) = DispatcherThread::new(system, receiver).run_with_affinity(core_id);
         ThreadHandle {
             sender: sender,
             handle: handle,
@@ -115,17 +110,17 @@ impl Dispatcher {
     }
 
     #[cfg(not(target_os = "linux"))]
-    fn create_threads(&self) -> Vec<ThreadHandle> {
+    fn create_threads(&self, system: ActorSystem) -> Vec<ThreadHandle> {
         iter::repeat(())
             .take(num_cpus::get())
-            .map(|_| self.create_thread())
+            .map(|_| self.create_thread(system))
             .collect::<Vec<ThreadHandle>>()
     }
 
     #[cfg(not(target_os = "linux"))]
-    fn create_thread(&self) -> ThreadHandle {
+    fn create_thread(&self, system: ActorSystem) -> ThreadHandle {
         let (sender, receiver) = mpsc::channel(100);
-        let (remote, handle) = DispatcherThread::new(receiver).run();
+        let (remote, handle) = DispatcherThread::new(system, receiver).run();
         ThreadHandle {
             sender: sender,
             handle: handle,
@@ -142,12 +137,14 @@ impl Dispatcher {
 
 struct DispatcherThread {
     receiver: mpsc::Receiver<ThreadMessage>,
+    system: ActorSystem,
 }
 
 impl DispatcherThread {
-    pub fn new(receiver: mpsc::Receiver<ThreadMessage>) -> Self {
+    pub fn new(system: ActorSystem, receiver: mpsc::Receiver<ThreadMessage>) -> Self {
         Self {
             receiver: receiver,
+            system: system,
         }
     }
 
@@ -161,6 +158,7 @@ impl DispatcherThread {
             *cloned_arc_remote.lock().unwrap() = Some(core.remote());
             context::set_thread_context(context::ThreadContext {
                 handle: handle,
+                system: self.system,
             });
             let _ = core.run(stream);
         });
@@ -190,6 +188,7 @@ impl DispatcherThread {
             *cloned_arc_remote.lock().unwrap() = Some(core.remote());
             context::set_thread_context(context::ThreadContext {
                 handle: handle,
+                system: self.system,
             });
             let _ = core.run(stream);
         });
@@ -198,7 +197,7 @@ impl DispatcherThread {
             if arc_remote.lock().unwrap().is_some() {
                 break;
             }
-            thread::sleep_ms(10);
+            thread::sleep(Duration::from_millis(10));
         }
         let remote = arc_remote.lock().unwrap().as_ref().unwrap().clone();
         (remote, handle)
@@ -218,13 +217,13 @@ fn handle_message(message: ThreadMessage) -> Result<(), ()> {
 
 fn count(n: usize) {
     let count = COUNTER.fetch_add(n, Ordering::SeqCst) + n;
-    if count % 100000 == 0 {
+    if (count - n) % 100000 > count % 100000 {
         let dt = (Instant::now() - *START).as_secs() as usize;
         if dt > 0 {
             let rate = count / dt;
             println!("Dispatch {} ({}/s)", count, rate);
         }
-        if count > 100000000 {
+        if count > 1000000000 {
             ::std::process::exit(0);
         }
     }

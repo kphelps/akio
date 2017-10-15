@@ -3,7 +3,6 @@ use super::actor_factory::create_actor;
 use super::errors::*;
 use parking_lot::RwLock;
 use std::boxed::FnBox;
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use uuid::Uuid;
@@ -15,14 +14,13 @@ pub struct ActorSystem {
 
 struct ActorSystemInner {
     dispatcher: Dispatcher,
-    root_actor: Option<ActorRef>,
+    root_actor: Option<ActorRef<GuardianActor>>,
     actors: ActorContainer,
 }
 
 impl ActorSystem {
     pub fn new() -> Self {
         let mut dispatcher = Dispatcher::new();
-        dispatcher.start();
         let inner = ActorSystemInner {
             dispatcher: dispatcher,
             root_actor: None,
@@ -31,8 +29,9 @@ impl ActorSystem {
         let system = Self {
             inner: Arc::new(RwLock::new(inner)),
         };
+        system.inner.write().dispatcher.start(system.clone());
         system.inner.write().root_actor =
-            Some(create_actor(&system, Uuid::new_v4(), GuardianActor {}));
+            Some(create_actor(system.clone(), Uuid::new_v4(), GuardianActor {}));
         system
     }
 
@@ -41,10 +40,10 @@ impl ActorSystem {
         F: FnBox() + 'static + Send,
     {
         let root_ref = self.root_actor();
-        root_ref.send_from(GuardianMessage::Execute(Box::new(f)), &root_ref)
+        root_ref.send(GuardianMessage::Execute(Box::new(f)))
     }
 
-    fn root_actor(&self) -> ActorRef {
+    fn root_actor(&self) -> ActorRef<GuardianActor> {
         self.inner.read().root_actor.as_ref().unwrap().clone()
     }
 
@@ -56,11 +55,15 @@ impl ActorSystem {
         self.inner.write().dispatcher.join()
     }
 
-    pub fn dispatch(&self, actor: ActorCellHandle) {
+    pub(crate) fn dispatch<A>(&self, actor: ActorCellHandle<A>)
+        where A: Actor
+    {
         self.inner.read().dispatch(actor);
     }
 
-    pub fn register_actor(&self, id: Uuid, actor: Arc<ActorCell>) {
+    pub(crate) fn register_actor<A>(&self, id: Uuid, actor: Arc<ActorCell<A>>)
+        where A: Actor
+    {
         if let Some(_) = self.inner.write().actors.insert(id.clone(), actor) {
             println!("Replacing existing actor?")
         }
@@ -75,10 +78,12 @@ impl ActorSystem {
             .actors
             .remove(id)
             .ok_or(ErrorKind::InvalidActor(id.clone()).into())
-            .map(|_| ())
+            .map(|_: Arc<ActorCell<A>>| ())
     }
 
-    pub fn get_actor(&self, id: &Uuid) -> Option<ActorRef> {
+    pub fn get_actor<T>(&self, id: &Uuid) -> Option<ActorRef<T>>
+        where T: Actor
+    {
         self.inner
             .read()
             .actors
@@ -88,7 +93,9 @@ impl ActorSystem {
 }
 
 impl ActorSystemInner {
-    fn dispatch(&self, actor: ActorCellHandle) {
+    fn dispatch<T>(&self, actor: ActorCellHandle<T>)
+        where T: Actor
+    {
         self.dispatcher.dispatch(actor)
     }
 }
@@ -102,6 +109,8 @@ enum GuardianMessage {
 impl Actor for GuardianActor {}
 
 impl MessageHandler<GuardianMessage> for GuardianActor {
+    type Response = ();
+
     fn handle(&mut self, message: GuardianMessage) {
         match message {
             GuardianMessage::Execute(f) => f(),

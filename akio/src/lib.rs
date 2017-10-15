@@ -17,10 +17,12 @@ extern crate num_cpus;
 extern crate parking_lot;
 extern crate rand;
 extern crate tokio_core;
+extern crate typemap;
 extern crate uuid;
 
 mod actor;
 mod actor_cell;
+mod actor_container;
 mod actor_factory;
 mod actor_ref;
 mod actor_system;
@@ -33,14 +35,12 @@ pub mod prelude;
 
 pub use actor::Actor;
 pub use actor::MessageHandler;
-pub use actor::TypedActor;
 use actor_cell::ActorCell;
 use actor_cell::ActorCellHandle;
+use actor_container::ActorContainer;
 use actor_factory::create_actor;
 pub use actor_ref::ActorRef;
 pub use actor_system::ActorSystem;
-use ask_actor::AskActor;
-pub use context::ActorContext;
 use dispatcher::Dispatcher;
 use mailbox::Mailbox;
 use mailbox::MailboxMessage;

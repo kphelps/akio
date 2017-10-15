@@ -1,5 +1,9 @@
-use typemap::{Key, TypeMap};
+use super::{Actor, ActorCell};
+use typemap::{Key, ShareMap};
+use std::collections::HashMap;
 use std::marker::PhantomData;
+use std::sync::Arc;
+use uuid::Uuid;
 
 struct ActorKey<T> {
     _actor: PhantomData<T>,
@@ -8,17 +12,17 @@ struct ActorKey<T> {
 impl<T> Key for ActorKey<T>
     where T: Actor
 {
-    type Value = HashMap<Uuid, Arc<ActorCell>>;
+    type Value = HashMap<Uuid, Arc<ActorCell<T>>>;
 }
 
-struct ActorContainer {
-    actors: TypeMap,
+pub(crate) struct ActorContainer {
+    actors: ShareMap,
 }
 
 impl ActorContainer {
     pub fn new() -> Self {
         Self {
-            actors: TypeMap::new(),
+            actors: ShareMap::custom(),
         }
     }
 
@@ -39,7 +43,7 @@ impl ActorContainer {
             .and_then(|hash| hash.remove(id))
     }
 
-    pub fn get(&self, id: &Uuid)
+    pub fn get<T>(&self, id: &Uuid)
         -> Option<&Arc<ActorCell<T>>>
         where T: Actor
     {
