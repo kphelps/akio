@@ -4,35 +4,42 @@ extern crate akio;
 
 use akio::prelude::*;
 
-struct TelephoneActor {}
+struct TelephoneActor {
+    children: Vec<ActorRef<TelephoneActor>>,
+}
 
 #[actor_impl]
 impl TelephoneActor {
+    pub fn new() -> Self {
+        Self {
+            children: Vec::new()
+        }
+    }
+
     #[actor_api]
     pub fn spawn_next(&mut self, n: u64) {
         if n % 10000 == 0 {
             println!("Spawning {}", n);
         }
-        let next_ref = spawn(Uuid::new_v4(), TelephoneActor {});
+        let next_ref = TelephoneActor::new().start();
         next_ref.spawn_next(n + 1);
+        self.children.push(next_ref);
     }
 
     #[actor_api]
     pub fn message(&mut self, msg: String) {
-        //self.with_children(|children| {
-            //children.iter().for_each(|target| {
-                //TelephoneActor::from_ref(target.clone()).message(msg.clone())
-            //})
-        //});
+        self.children.iter().for_each(|child| {
+            child.message(msg.clone())
+        })
     }
 }
 
 pub fn main() {
     let mut system = ActorSystem::new();
     system.on_startup(|| {
-        let actor_ref = spawn(Uuid::new_v4(), TelephoneActor {});
-        actor_ref.spawn_next_with_sender(0, &actor_ref);
-        actor_ref.message_with_sender("Yo".to_string(), &actor_ref);
+        let actor_ref = TelephoneActor::new().start();
+        actor_ref.spawn_next(0);
+        actor_ref.message("Yo".to_string());
     });
     system.start();
 }

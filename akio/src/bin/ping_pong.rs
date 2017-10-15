@@ -30,27 +30,9 @@ impl PongActor {
     fn log_shutdown(&self) {}
 }
 
-//#[derive(Actor)]
 struct PingActor {
     pong: Option<ActorRef<PongActor>>
 }
-
-//#[actor_api(PingActor)]
-//handler pong(&mut self) {
-
-//}
-
-//struct PongMessage {
-    //inner: String,
-//}
-
-//impl MessageHandler<PongMessage> for PingActor {
-    //type Response = ();
-
-    //fn handle(&mut self, message: PongMessage) {
-        //self.pong.map(|pong| pong.ping());
-    //}
-//}
 
 #[actor_impl]
 impl PingActor {
