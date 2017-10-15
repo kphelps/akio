@@ -20,14 +20,19 @@ impl PongActor {
 
     #[actor_api]
     pub fn ping(&mut self) {
-        self.ping.pong();
+        self.ping.send_pong();
+        self.done()
     }
 
     #[on_start]
-    fn log_startup(&self) {}
+    fn log_startup(&self) {
+        self.done()
+    }
 
     #[on_stop]
-    fn log_shutdown(&self) {}
+    fn log_shutdown(&self) {
+        self.done()
+    }
 }
 
 struct PingActor {
@@ -45,21 +50,25 @@ impl PingActor {
     #[actor_api]
     pub fn initialize(&mut self, pong: ActorRef<PongActor>) {
         self.pong = Some(pong);
+        self.done()
     }
 
     #[actor_api]
     pub fn pong(&mut self) {
-        self.pong.as_ref().map(|pong| pong.ping());
+        self.pong.as_ref().map(|pong| pong.send_ping());
+        self.done()
     }
 
     #[on_start]
     fn on_start(&self) {
         println!("Starting ping!");
+        self.done()
     }
 
     #[on_stop]
     fn on_stop(&self) {
         println!("Stopping ping!");
+        self.done()
     }
 }
 
@@ -69,7 +78,7 @@ fn spawn_ping_loop() {
     ping.initialize(pong.clone());
     iter::repeat(())
         .take(20)
-        .for_each(|_| pong.ping());
+        .for_each(|_| {pong.ping(); });
 }
 
 pub fn main() {

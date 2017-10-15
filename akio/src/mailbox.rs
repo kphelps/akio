@@ -1,4 +1,4 @@
-use super::{Actor, MessageHandler};
+use super::{Actor, ActorResponse, MessageHandler};
 use futures::sync::oneshot;
 use std::collections::VecDeque;
 use std::marker::PhantomData;
@@ -17,11 +17,14 @@ pub(crate) struct UserMessageWrapper<A>(Box<UserMessage<A>>);
 impl<A> UserMessageWrapper<A>
     where A: Actor
 {
-    pub fn make<M>(message: M) -> Self
+    pub fn make<M>(
+        message: M,
+        promise: Option<oneshot::Sender<ActorResponse<A::Response>>>,
+    ) -> Self
         where M: Send + 'static,
               A: MessageHandler<M>,
     {
-        UserMessageWrapper(Box::new(LocalUserMessage::new(message)))
+        UserMessageWrapper(Box::new(LocalUserMessage::new(message, promise)))
     }
 
     pub fn handle(&mut self, actor: &mut A) {
@@ -33,16 +36,23 @@ trait UserMessage<A>: Send {
     fn handle(&mut self, actor: &mut A);
 }
 
-struct LocalUserMessage<A, M> {
+struct LocalUserMessage<A, M>
+    where A: MessageHandler<M>
+{
     message: Option<M>,
-    actor: PhantomData<A>
+    promise: Option<oneshot::Sender<ActorResponse<A::Response>>>
 }
 
-impl<A, M> LocalUserMessage<A, M> {
-    pub fn new(message: M) -> Self {
+impl<A, M> LocalUserMessage<A, M>
+    where A: MessageHandler<M>
+{
+    pub fn new(
+        message: M,
+        promise: Option<oneshot::Sender<ActorResponse<A::Response>>>
+    ) -> Self {
         Self {
             message: Some(message),
-            actor: PhantomData,
+            promise: promise,
         }
     }
 }
@@ -53,7 +63,8 @@ impl<A, M> UserMessage<A> for LocalUserMessage<A, M>
 {
     fn handle(&mut self, actor: &mut A) {
         if let Some(message) = self.message.take() {
-            actor.handle_message(message);
+            let response = actor.handle_message(message);
+            self.promise.take().map(|promise| promise.send(response));
         }
     }
 }
@@ -75,12 +86,15 @@ impl<A> Mailbox<A>
         self.messages.is_empty()
     }
 
-    pub fn push<M>(&mut self, message: M)
-        where A: MessageHandler<M>,
-              M: Send + 'static,
+    pub fn push<M>(
+        &mut self,
+        message: M,
+        promise: Option<oneshot::Sender<ActorResponse<A::Response>>>,
+    ) where A: MessageHandler<M>,
+            M: Send + 'static,
     {
         self.messages
-            .push_back(MailboxMessage::User(UserMessageWrapper::make(message)))
+            .push_back(MailboxMessage::User(UserMessageWrapper::make(message, promise)))
     }
 
     pub fn push_system_message(&mut self, system_message: SystemMessage) {

@@ -16,6 +16,10 @@ pub fn set_thread_context(context: ThreadContext) {
     CURRENT_THREAD.with(|ctx| *ctx.borrow_mut() = Some(context))
 }
 
+pub fn maybe_handle() -> Option<Handle> {
+    CURRENT_THREAD.with(|ctx| ctx.borrow().as_ref().map(|inner| inner.handle.clone()))
+}
+
 pub fn handle() -> Handle {
     CURRENT_THREAD.with(|ctx| ctx.borrow().as_ref().unwrap().handle.clone())
 }

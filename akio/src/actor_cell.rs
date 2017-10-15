@@ -2,6 +2,7 @@ use super::{
     create_actor,
     Actor,
     ActorRef,
+    ActorResponse,
     ActorSystem,
     Mailbox,
     MailboxMessage,
@@ -10,6 +11,7 @@ use super::{
 };
 use super::errors::*;
 use futures::prelude::*;
+use futures::sync::oneshot;
 use parking_lot::{Mutex};
 use std::any::Any;
 use std::clone::Clone;
@@ -79,12 +81,16 @@ impl<A> ActorCellHandle<A>
         self.with_cell_unwrapped(|cell| cell.process_messages(self_ref, max_count))
     }
 
-    pub fn enqueue_message<M>(&self, message: M)
+    pub fn enqueue_message<M>(
+        &self,
+        message: M,
+        promise: Option<oneshot::Sender<ActorResponse<A::Response>>>
+    )
         where A: MessageHandler<M>,
               M: Send + 'static,
     {
         let me = self.clone();
-        if let Err(e) = self.with_cell(|cell| cell.enqueue_message(me, message)) {
+        if let Err(e) = self.with_cell(|cell| cell.enqueue_message(me, message, promise)) {
             println!("Enqueued dead message: {}", e);
         }
     }
@@ -168,11 +174,15 @@ impl<A> ActorCell<A>
         v
     }
 
-    pub fn enqueue_message<M>(&self, me: ActorCellHandle<A>, message: M)
-        where A: MessageHandler<M>,
-              M: Send + 'static
+    pub fn enqueue_message<M>(
+        &self,
+        me: ActorCellHandle<A>,
+        message: M,
+        promise: Option<oneshot::Sender<ActorResponse<A::Response>>>,
+    ) where A: MessageHandler<M>,
+            M: Send + 'static
     {
-        self.mailbox.lock().push(message);
+        self.mailbox.lock().push(message, promise);
         self.dispatch(me);
     }
 

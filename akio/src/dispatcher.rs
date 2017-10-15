@@ -57,7 +57,11 @@ impl ThreadHandle {
             .send(message)
             .map(|_| ())
             .map_err(|_| ());
-        self.remote.execute(f).unwrap();
+        if let Some(handle) = context::maybe_handle() {
+            handle.execute(f).unwrap();
+        } else {
+            self.remote.execute(f).unwrap();
+        }
     }
 }
 
@@ -217,14 +221,11 @@ fn handle_message(message: ThreadMessage) -> Result<(), ()> {
 
 fn count(n: usize) {
     let count = COUNTER.fetch_add(n, Ordering::SeqCst) + n;
-    if (count - n) % 100000 > count % 100000 {
+    if (count - n) % 10000000 > count % 10000000 {
         let dt = (Instant::now() - *START).as_secs() as usize;
         if dt > 0 {
             let rate = count / dt;
             println!("Dispatch {} ({}/s)", count, rate);
-        }
-        if count > 1000000000 {
-            ::std::process::exit(0);
         }
     }
 }

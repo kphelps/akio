@@ -1,4 +1,4 @@
-use super::{Actor, ActorCellHandle, MessageHandler, SystemMessage};
+use super::{Actor, ActorCellHandle, ActorResponse, MessageHandler, SystemMessage};
 use futures::prelude::*;
 use futures::sync::oneshot;
 use std::clone::Clone;
@@ -33,11 +33,24 @@ impl<A> ActorRef<A>
         self.cell.id()
     }
 
+    pub fn request<T>(&self, message: T) ->
+        impl Future<
+            Item = ActorResponse<A::Response>,
+            Error = ()
+        >
+        where A: MessageHandler<T>,
+              T: Send + 'static
+    {
+        let (promise, future) = oneshot::channel();
+        self.cell.enqueue_message(message, Some(promise));
+        future.map_err(|_| ())
+    }
+
     pub fn send<T>(&self, message: T)
         where A: MessageHandler<T>,
               T: Send + 'static
     {
-        self.cell.enqueue_message(message)
+        self.cell.enqueue_message(message, None);
     }
 
     fn system_send(&self, message: SystemMessage) {

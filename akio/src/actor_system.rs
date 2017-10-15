@@ -1,4 +1,4 @@
-use super::{Actor, ActorCell, ActorCellHandle, ActorContainer, ActorRef, Dispatcher, MessageHandler};
+use super::{Actor, ActorCell, ActorCellHandle, ActorContainer, ActorRef, ActorResponse, Dispatcher, MessageHandler};
 use super::actor_factory::create_actor;
 use super::errors::*;
 use parking_lot::RwLock;
@@ -40,7 +40,7 @@ impl ActorSystem {
         F: FnBox() + 'static + Send,
     {
         let root_ref = self.root_actor();
-        root_ref.send(GuardianMessage::Execute(Box::new(f)))
+        root_ref.request(GuardianMessage::Execute(Box::new(f)));
     }
 
     fn root_actor(&self) -> ActorRef<GuardianActor> {
@@ -48,7 +48,7 @@ impl ActorSystem {
     }
 
     pub fn start(&self) {
-        ::std::thread::sleep(Duration::from_secs(1000000));
+        ::std::thread::sleep(Duration::from_secs(60));
     }
 
     pub fn stop(self) {
@@ -111,9 +111,12 @@ impl Actor for GuardianActor {}
 impl MessageHandler<GuardianMessage> for GuardianActor {
     type Response = ();
 
-    fn handle(&mut self, message: GuardianMessage) {
+    fn handle(&mut self, message: GuardianMessage)
+        -> ActorResponse<()>
+    {
         match message {
             GuardianMessage::Execute(f) => f(),
-        }
+        };
+        self.done()
     }
 }

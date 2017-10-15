@@ -26,7 +26,6 @@ mod actor_container;
 mod actor_factory;
 mod actor_ref;
 mod actor_system;
-mod ask_actor;
 pub mod context;
 mod dispatcher;
 pub mod errors;
@@ -34,6 +33,7 @@ mod mailbox;
 pub mod prelude;
 
 pub use actor::Actor;
+pub use actor::ActorResponse;
 pub use actor::MessageHandler;
 use actor_cell::ActorCell;
 use actor_cell::ActorCellHandle;
