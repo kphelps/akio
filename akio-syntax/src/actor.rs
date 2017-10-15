@@ -36,13 +36,14 @@ impl ActorMessageMethod {
         }
     }
 
-    pub fn method(&self) -> syn::ImplItem {
-        syn::ImplItem {
-            ident: self.method_name(),
-            vis: syn::Visibility::Inherited,
-            defaultness: syn::Defaultness::Final,
-            attrs: Vec::new(),
-            node: syn::ImplItemKind::Method(self.get_signature(), self.get_block()),
+    pub fn method(&self) -> quote::Tokens {
+        let method_name = self.method_name();
+        let inner_return_type = self.inner_return_type();
+        let return_type = quote!{ ActorResponse<#inner_return_type> };
+        let inputs = self.get_signature().decl.inputs.clone();
+        let block = self.get_block();
+        quote! {
+            fn #method_name(#(#inputs,)*) -> #return_type #block
         }
     }
 
@@ -85,6 +86,7 @@ impl ActorMessageMethod {
         actor_name: syn::Ident,
     ) -> quote::Tokens {
         let message_name = self.message_name(&actor_name);
+        let response_type = self.inner_return_type();
         let message_unpackers = self.fields()
             .iter()
             .enumerate()
@@ -93,17 +95,36 @@ impl ActorMessageMethod {
         let method_name = self.method_name();
         quote! {
             impl MessageHandler<#message_name> for #actor_name {
-                type Response = ();
+                type Response = #response_type;
 
-                fn handle(&mut self, message: #message_name) {
-                    self.#method_name(#(message.#message_unpackers,)*);
+                fn handle(&mut self, message: #message_name)
+                    -> ActorResponse<Self::Response>
+                {
+                    self.#method_name(#(message.#message_unpackers,)*)
                 }
             }
         }
     }
 
-    pub fn ref_method_signatures(&self, actor_name: &syn::Ident) -> quote::Tokens {
+    pub fn future_return_type(&self) -> quote::Tokens {
+        let return_type = self.inner_return_type();
+        quote! {
+            Box<Future<Item = #return_type, Error = ()> + Send>
+        }
+    }
+
+    pub fn inner_return_type(&self) -> quote::Tokens {
+        match self.get_signature().decl.output {
+            syn::FunctionRetTy::Default => quote!{ () },
+            syn::FunctionRetTy::Ty(ty) => quote!{ #ty },
+        }
+    }
+
+    pub fn ref_method_signatures(&self) -> quote::Tokens {
         let method_name = self.method_name();
+        let send_method_name =
+            syn::Ident::from(format!("send_{}", method_name.as_ref()));
+        let return_type = self.future_return_type();
         let arg_names = &self.fields()
             .iter()
             .enumerate()
@@ -122,12 +143,16 @@ impl ActorMessageMethod {
             })
             .collect::<Vec<syn::BareFnArg>>();
         quote! {
-            fn #method_name(&self, #(#args,)*);
+            fn #method_name(&self, #(#args,)*) -> #return_type;
+            fn #send_method_name(&self, #(#args,)*);
         }
     }
 
     pub fn ref_methods(&self, actor_name: &syn::Ident) -> quote::Tokens {
         let method_name = self.method_name();
+        let send_method_name =
+            syn::Ident::from(format!("send_{}", method_name.as_ref()));
+        let return_type = self.future_return_type();
         let arg_names = &self.fields()
             .iter()
             .enumerate()
@@ -147,8 +172,13 @@ impl ActorMessageMethod {
             .collect::<Vec<syn::BareFnArg>>();
         let message_name = self.message_name(actor_name);
         quote! {
-            fn #method_name(&self, #(#args,)*)  {
-                self.send(#message_name(#(#arg_names,)*));
+            fn #method_name(&self, #(#args,)*) -> #return_type
+            {
+                Box::new(self.request(#message_name(#(#arg_names,)*)).flatten())
+            }
+
+            fn #send_method_name(&self, #(#args,)*) {
+                self.send(#message_name(#(#arg_names,)*))
             }
         }
     }
@@ -284,7 +314,7 @@ impl ActorImpl {
         self.message_methods
             .iter()
             .map(|message_method| {
-                message_method.ref_method_signatures(&self.name())
+                message_method.ref_method_signatures()
             })
             .collect()
     }
@@ -305,12 +335,12 @@ impl ActorImpl {
             .collect()
     }
 
-    fn actor_impl(&self) -> Vec<syn::ImplItem> {
+    fn actor_impl(&self) -> Vec<quote::Tokens> {
         self.message_methods
             .iter()
             .chain(self.hook_methods.iter().flat_map(|(_, methods)| methods))
             .map(ActorMessageMethod::method)
-            .chain(self.rest.clone())
+            .chain(self.rest.iter().map(|x| quote!(#x)))
             .collect()
     }
 

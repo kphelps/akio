@@ -18,18 +18,19 @@ impl SkynetActor {
     pub fn poke(&mut self, n: u64) -> u64
     {
         if n >= 100000 {
-            future::ok(n)
+            self.respond(n)
         } else {
             let fs = (0..10).map(move |sub_n| {
                 let next_ref = SkynetActor::new().start();
                 let id = n * 10 + sub_n + 1;
                 next_ref.poke(id)
             });
-            future::join_all(fs).map(move |vals| {
+            let f = future::join_all(fs).map(move |vals| {
                 let pre_sum: u64 = vals.iter().sum();
                 let sum: u64 = pre_sum + n;
                 sum
-            })
+            });
+            self.respond_fut(f)
         }
     }
 }

@@ -22,15 +22,17 @@ impl TelephoneActor {
             println!("Spawning {}", n);
         }
         let next_ref = TelephoneActor::new().start();
-        next_ref.spawn_next(n + 1);
+        next_ref.send_spawn_next(n + 1);
         self.children.push(next_ref);
+        self.done()
     }
 
     #[actor_api]
     pub fn message(&mut self, msg: String) {
         self.children.iter().for_each(|child| {
-            child.message(msg.clone())
-        })
+            child.send_message(msg.clone());
+        });
+        self.done()
     }
 }
 
