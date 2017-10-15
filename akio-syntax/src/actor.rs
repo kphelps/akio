@@ -121,7 +121,6 @@ impl ActorMessageMethod {
                 }
             })
             .collect::<Vec<syn::BareFnArg>>();
-        let message_name = self.message_name(actor_name);
         quote! {
             fn #method_name(&self, #(#args,)*);
         }
@@ -241,10 +240,11 @@ impl ActorImpl {
         let mut message_methods = Vec::new();
         let mut hook_methods = HashMap::new();
         let mut rest = Vec::new();
-        impl_items.into_iter().for_each(|item| {
+        impl_items.into_iter().for_each(|mut item| {
             if has_marker(&item, "actor_api") {
                 message_methods.push(ActorMessageMethod::new(item));
             } else if HookType::has_marker(&item) {
+                item.ident = syn::Ident::from(format!("_hook_{}", item.ident.as_ref()));
                 hook_methods
                     .entry(HookType::get(&item).unwrap())
                     .or_insert(Vec::new())

@@ -70,15 +70,15 @@ impl PingActor {
         self.pong.as_ref().map(|pong| pong.ping());
     }
 
-    //#[on_start]
-    //fn on_start(&self) {
-        //println!("Starting ping!");
-    //}
+    #[on_start]
+    fn on_start(&self) {
+        println!("Starting ping!");
+    }
 
-    //#[on_stop]
-    //fn on_stop(&self) {
-        //println!("Stopping ping!");
-    //}
+    #[on_stop]
+    fn on_stop(&self) {
+        println!("Stopping ping!");
+    }
 }
 
 fn spawn_ping_loop() {
