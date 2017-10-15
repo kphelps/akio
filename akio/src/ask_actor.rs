@@ -1,4 +1,4 @@
-use super::Actor;
+use super::{Actor, MessageHandler};
 use futures::sync::oneshot;
 
 pub struct AskActor<T> {
@@ -13,13 +13,10 @@ impl<T> AskActor<T> {
     }
 }
 
-impl<T> Actor for AskActor<T>
-where
-    T: 'static,
-{
-    type Message = T;
+impl<T> Actor for AskActor<T> {}
 
-    fn handle_message(&mut self, message: T) {
+impl<T> MessageHandler<T> for AskActor<T> {
+    fn handle(&mut self, message: T) {
         let promise = ::std::mem::replace(&mut self.promise, None);
         match promise.unwrap().send(message) {
             Ok(_) => (),

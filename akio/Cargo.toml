@@ -18,4 +18,5 @@ tokio-io = "0.1"
 tokio-core = "0.1"
 tokio-proto = "0.1"
 tokio-service = "0.1"
+typemap = "0.3"
 uuid = { version = "0.4", features = ["v4"] }

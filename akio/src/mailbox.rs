@@ -8,7 +8,7 @@ pub enum SystemMessage {
 }
 
 pub enum MailboxMessage {
-    User(Box<Any + Send>, ActorRef),
+    User(Box<Any + Send>),
     System(SystemMessage),
 }
 
@@ -27,7 +27,7 @@ impl Mailbox {
         self.messages.is_empty()
     }
 
-    pub fn push(&mut self, message: Box<Any + Send>, sender: ActorRef) {
+    pub fn push(&mut self, message: Box<Any + Send>) {
         self.messages
             .push_back(MailboxMessage::User(message, sender))
     }

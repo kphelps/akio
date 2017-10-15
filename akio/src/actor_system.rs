@@ -1,4 +1,4 @@
-use super::{Actor, ActorCell, ActorCellHandle, ActorRef, Dispatcher};
+use super::{Actor, ActorCell, ActorCellHandle, ActorContainer, ActorRef, Dispatcher, MessageHandler};
 use super::actor_factory::create_actor;
 use super::errors::*;
 use parking_lot::RwLock;
@@ -16,7 +16,7 @@ pub struct ActorSystem {
 struct ActorSystemInner {
     dispatcher: Dispatcher,
     root_actor: Option<ActorRef>,
-    actors: HashMap<Uuid, Arc<ActorCell>>,
+    actors: ActorContainer,
 }
 
 impl ActorSystem {
@@ -26,7 +26,7 @@ impl ActorSystem {
         let inner = ActorSystemInner {
             dispatcher: dispatcher,
             root_actor: None,
-            actors: HashMap::new(),
+            actors: ActorContainer::new(),
         };
         let system = Self {
             inner: Arc::new(RwLock::new(inner)),
@@ -66,7 +66,10 @@ impl ActorSystem {
         }
     }
 
-    pub fn deregister_actor(&self, id: &Uuid) -> Result<()> {
+    pub fn deregister_actor<A>(&self, id: &Uuid)
+        -> Result<()>
+        where A: Actor
+    {
         self.inner
             .write()
             .actors
@@ -96,10 +99,10 @@ enum GuardianMessage {
     Execute(Box<FnBox() + 'static + Send>),
 }
 
-impl Actor for GuardianActor {
-    type Message = GuardianMessage;
+impl Actor for GuardianActor {}
 
-    fn handle_message(&mut self, message: Self::Message) {
+impl MessageHandler<GuardianMessage> for GuardianActor {
+    fn handle(&mut self, message: GuardianMessage) {
         match message {
             GuardianMessage::Execute(f) => f(),
         }

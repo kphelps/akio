@@ -1,4 +1,4 @@
-use super::{context, ActorCellHandle};
+use super::{context, Actor, ActorCellHandle};
 #[cfg(target_os = "linux")]
 use core_affinity;
 use futures::future::Executor;
@@ -22,8 +22,26 @@ lazy_static! {
 
 
 enum ThreadMessage {
-    ProcessActor(ActorCellHandle),
+    ProcessActor(Box<ActorProcessor>),
     Stop(),
+}
+
+trait ActorProcessor {
+    fn process(self) -> usize;
+}
+
+struct ActorProcessorContext<T> {
+    handle: ActorCellHandle<T>
+}
+
+impl<T> ActorProcessor for ActorProcessorContext<T>
+    where T: Actor
+{
+    fn process(self) -> usize {
+        let n = actor_cell.process_messages(10);
+        actor_cell.set_idle_or_dispatch();
+        n
+    }
 }
 
 struct ThreadHandle {
@@ -69,7 +87,9 @@ impl Dispatcher {
         handles.into_iter().for_each(ThreadHandle::join)
     }
 
-    pub fn dispatch(&self, actor: ActorCellHandle) {
+    pub fn dispatch<T>(&self, actor: ActorCellHandle<T>)
+        where T: Actor
+    {
         let thread_handle = self.next_thread();
         thread_handle.send(ThreadMessage::ProcessActor(actor));
     }
@@ -187,10 +207,9 @@ impl DispatcherThread {
 
 fn handle_message(message: ThreadMessage) -> Result<(), ()> {
     match message {
-        ThreadMessage::ProcessActor(actor_cell) => {
-            let n = actor_cell.process_messages(10);
+        ThreadMessage::ProcessActor(processor) => {
+            let n = processor.process();
             count(n);
-            actor_cell.set_idle_or_dispatch();
             Ok(())
         }
         ThreadMessage::Stop() => Err(()),

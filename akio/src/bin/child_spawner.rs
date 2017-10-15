@@ -19,11 +19,11 @@ impl TelephoneActor {
 
     #[actor_api]
     pub fn message(&mut self, msg: String) {
-        self.with_children(|children| {
-            children.iter().for_each(|target| {
-                TelephoneActor::from_ref(target.clone()).message(msg.clone())
-            })
-        });
+        //self.with_children(|children| {
+            //children.iter().for_each(|target| {
+                //TelephoneActor::from_ref(target.clone()).message(msg.clone())
+            //})
+        //});
     }
 }
 

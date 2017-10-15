@@ -1,11 +1,9 @@
 use super::{
     context,
     create_actor,
-    ActorChildren,
-    ActorContext,
+    Actor,
     ActorRef,
     ActorSystem,
-    BaseActor,
     Mailbox,
     MailboxMessage,
     SystemMessage,
@@ -46,14 +44,16 @@ impl ActorStatus {
 }
 
 #[derive(Clone)]
-pub struct ActorCellHandle {
+pub struct ActorCellHandle<A> {
     // ActorSystem holds the only RCs. When the actor is stopped the pointer
     // will fail to upgrade.
-    cell: Weak<ActorCell>,
+    cell: Weak<ActorCell<A>>,
 }
 
-impl ActorCellHandle {
-    pub fn new(p_cell: Weak<ActorCell>) -> Self {
+impl<A> ActorCellHandle<A>
+    where A: Actor
+{
+    pub fn new(p_cell: Weak<ActorCell<A>>) -> Self {
         Self {
             cell: p_cell,
         }
@@ -72,9 +72,11 @@ impl ActorCellHandle {
         self.with_cell_unwrapped(|cell| cell.process_messages(self_ref, max_count))
     }
 
-    pub fn enqueue_message(&self, message: Box<Any + Send>, sender: ActorRef) {
+    pub fn enqueue_message(&self, message: Box<Any + Send>)
+        where B: Actor
+    {
         let me = self.clone();
-        if let Err(e) = self.with_cell(|cell| cell.enqueue_message(me, message, sender)) {
+        if let Err(e) = self.with_cell(|cell| cell.enqueue_message(me, message)) {
             println!("Enqueued dead message: {}", e);
         }
     }
@@ -91,18 +93,11 @@ impl ActorCellHandle {
         let _ = self.with_cell(|cell| cell.set_idle_or_dispatch(me));
     }
 
-    pub fn spawn<A>(&self, id: Uuid, actor: A) -> ActorRef
+    pub fn spawn<B>(&self, id: Uuid, actor: B) -> ActorRef<B>
     where
-        A: BaseActor + 'static,
+        B: Actor,
     {
         self.with_cell_unwrapped(|cell| cell.spawn(id, actor))
-    }
-
-    pub fn with_children<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(&ActorChildren) -> R,
-    {
-        self.with_cell_unwrapped(|cell| f(&cell.children.lock()))
     }
 
     pub fn on_start(&self) {
@@ -111,7 +106,7 @@ impl ActorCellHandle {
 
     fn with_cell<F, R>(&self, f: F) -> Result<R>
     where
-        F: FnOnce(Arc<ActorCell>) -> R,
+        F: FnOnce(Arc<ActorCell<A>>) -> R,
     {
         match self.cell.upgrade() {
             Some(cell) => Ok(f(cell)),
@@ -121,31 +116,27 @@ impl ActorCellHandle {
 
     fn with_cell_unwrapped<F, R>(&self, f: F) -> R
     where
-        F: FnOnce(Arc<ActorCell>) -> R,
+        F: FnOnce(Arc<ActorCell<A>>) -> R,
     {
         self.with_cell(f).expect("actor ref invalidated")
     }
 }
 
-pub struct ActorCell {
+pub struct ActorCell<A> {
     id: Uuid,
     mailbox: Mutex<Mailbox>,
-    children: Mutex<ActorChildren>,
     status: Mutex<ActorStatus>,
-    actor: Mutex<Box<BaseActor>>,
+    actor: Mutex<A>,
     system: ActorSystem,
 }
 
-impl ActorCell {
-    pub fn new<A>(system: ActorSystem, id: Uuid, actor: A) -> Arc<ActorCell>
-    where
-        A: BaseActor + 'static,
+impl<A> ActorCell<Actor> {
+    pub fn new(system: ActorSystem, id: Uuid, actor: A) -> Arc<ActorCell<A>>
     {
         let mailbox = Mutex::new(Mailbox::new());
         let cell = Self {
             id: id,
             mailbox: mailbox,
-            children: Mutex::new(ActorChildren::new()),
             system: system,
             status: Mutex::new(ActorStatus::Idle),
             actor: Mutex::new(Box::new(actor)),
@@ -153,10 +144,9 @@ impl ActorCell {
         Arc::new(cell)
     }
 
-    pub fn process_messages(&self, self_ref: ActorRef, max_count: usize) -> usize {
+    pub fn process_messages(&self, self_ref: ActorRef<A>, max_count: usize) -> usize {
         let message_batch = self.next_batch_to_process(max_count);
         let count = message_batch.len();
-        self.set_current_actor(self_ref);
         message_batch
             .into_iter()
             .for_each(|message| self.process_message(message));
@@ -175,17 +165,19 @@ impl ActorCell {
         v
     }
 
-    pub fn enqueue_message(&self, me: ActorCellHandle, message: Box<Any + Send>, sender: ActorRef) {
-        self.mailbox.lock().push(message, sender);
+    pub fn enqueue_message(&self, me: ActorCellHandle<A>, message: Box<Any + Send>)
+        where B: Actor
+    {
+        self.mailbox.lock().push(message);
         self.dispatch(me);
     }
 
-    pub fn enqueue_system_message(&self, me: ActorCellHandle, message: SystemMessage) {
+    pub fn enqueue_system_message(&self, me: ActorCellHandle<A>, message: SystemMessage) {
         self.mailbox.lock().push_system_message(message);
         self.dispatch(me);
     }
 
-    pub fn set_idle_or_dispatch(&self, me: ActorCellHandle) {
+    pub fn set_idle_or_dispatch(&self, me: ActorCellHandle<A>) {
         let mailbox = self.mailbox.lock();
         if mailbox.is_empty() {
             self.set_status(ActorStatus::Idle);
@@ -194,20 +186,14 @@ impl ActorCell {
         }
     }
 
-    pub fn spawn<A>(&self, id: Uuid, actor: A) -> ActorRef
+    pub fn spawn<B>(&self, id: Uuid, actor: B) -> ActorRef<B>
     where
-        A: BaseActor + 'static,
+        B: Actor,
     {
-        let actor_ref = create_actor(&self.system, id, actor);
-        self.children.lock().insert(id, &actor_ref);
-        actor_ref
+        create_actor(&self.system, id, actor)
     }
 
-    fn set_current_actor(&self, self_ref: ActorRef) {
-        context::set_current_actor(ActorContext::new(self_ref, self.system.clone()))
-    }
-
-    fn dispatch(&self, cell: ActorCellHandle) {
+    fn dispatch(&self, cell: ActorCellHandle<A>) {
         if !self.status.lock().is_idle() {
             return;
         }
@@ -217,8 +203,7 @@ impl ActorCell {
 
     fn process_message(&self, message: MailboxMessage) {
         match message {
-            MailboxMessage::User(inner, sender) => {
-                context::set_sender(sender);
+            MailboxMessage::User(inner) => {
                 self.actor.lock().handle_any(inner)
             }
             MailboxMessage::System(inner) => self.handle_system_message(inner),
@@ -231,11 +216,6 @@ impl ActorCell {
                 self.set_status(ActorStatus::Terminated);
                 self.actor.lock().on_stop();
                 let _ = self.system.deregister_actor(&self.id);
-                let children = self.children.lock().iter().cloned().collect::<Vec<ActorRef>>();
-                let lock_fs = children.into_iter().map(|ar| ar.stop());
-                let f = future::join_all(lock_fs)
-                    .map(move |_| promise.send(()).unwrap());
-                context::execute(f);
             }
         }
     }
