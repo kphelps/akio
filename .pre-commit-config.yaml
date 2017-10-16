@@ -1,0 +1,37 @@
+repos:
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  sha: v1.1.0
+  hooks:
+  - id: check-added-large-files
+  - id: check-json
+  - id: check-yaml
+  - id: detect-aws-credentials
+  - id: detect-private-key
+  - id: mixed-line-ending
+  - id: end-of-file-fixer
+  - id: trailing-whitespace
+- repo: https://github.com/pre-commit/pre-commit
+  sha: v1.3.0
+  hooks:
+  - id: validate_manifest
+- repo: local
+  hooks:
+  - id: rustfmt
+    name: Format Rust Code
+    description: This hook autoformats rust code.
+    entry: cargo fmt --all --
+    files: \.rs$
+    language: system
+  - id: clippy
+    name: Lint Rust Code
+    description: This hook lints rust code.
+    entry: cargo clippy --all
+    files: \.rs$
+    pass_filenames: false
+    language: system
+  - id: markdownlint
+    name: Lint Markdown
+    description: This hook lints markdown files.
+    entry: mdl
+    files: \.md$
+    language: ruby

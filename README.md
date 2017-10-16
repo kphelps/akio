@@ -5,7 +5,7 @@
 Akio is a fast, highly concurrent, and easy to use framework for building
 distributed systems using the Actor Model.
 
-**[API Documentation](https://kphelps.github.io/akio/akio/index.html)**
+[API Documentation](https://kphelps.github.io/akio/akio/index.html)
 
 ## Overview
 
@@ -13,8 +13,8 @@ Akio takes heavy inspiration from the Erlang VM and other actor frameworks
 such as Akka and Orleans. The goal of this project is to take the ideals
 of these actor frameworks and apply them to rust, where we can have
 extremely high performance while providing an friendly, type safe API
-without the overhead we see in other languages. Akio will be a platform 
-for building highly concurrent, resilient, and scalable distributed systems 
+without the overhead we see in other languages. Akio will be a platform
+for building highly concurrent, resilient, and scalable distributed systems
 in rust.
 
 ## Features
@@ -30,7 +30,7 @@ Akio is an early stage project under active development.
 
 ## Requirements
 
-Akio currently requires nightly rust. This project is waiting on the following 
+Akio currently requires nightly rust. This project is waiting on the following
 language features to be stabilized:
 
 * `proc_macro`
@@ -127,6 +127,16 @@ pub fn main() {
 }
 ```
 
-## Contributing
+## Development
+
+To setup this repository's pre-commit hooks:
+
+```
+pip install pre-commit
+cargo install clippy rustfmt-nightly
+pre-commit install
+```
+
+### Contributing
 
 All contributions are welcome. Please open an issue or pull request to get started!
