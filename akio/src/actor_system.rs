@@ -10,6 +10,8 @@ use super::{
 };
 use super::actor_factory::create_actor;
 use super::errors::*;
+use futures::Future;
+use futures::sync::oneshot;
 use parking_lot::RwLock;
 use std::boxed::FnBox;
 use std::sync::Arc;
@@ -25,6 +27,7 @@ struct ActorSystemInner {
     dispatcher: Dispatcher,
     root_actor: Option<ActorRef<GuardianActor>>,
     actors: ActorContainer,
+    done_signal: Option<oneshot::Sender<()>>,
 }
 
 impl ActorSystem {
@@ -34,6 +37,7 @@ impl ActorSystem {
             dispatcher: dispatcher,
             root_actor: None,
             actors: ActorContainer::new(),
+            done_signal: None,
         };
         let system = Self {
             inner: Arc::new(RwLock::new(inner)),
@@ -60,11 +64,20 @@ impl ActorSystem {
     }
 
     pub fn start(&self) {
-        ::std::thread::sleep(Duration::from_secs(60));
+        let (promise, future) = oneshot::channel();
+        self.inner.write().done_signal = Some(promise);
+        future.wait().expect("Shutdown failed");
     }
 
-    pub fn stop(self) {
-        self.inner.write().dispatcher.join()
+    pub fn stop(&self) {
+        let system = self.clone();
+        if let Some(promise) = self.inner.write().done_signal.take() {
+            ::std::thread::spawn(move || {
+                let mut locked = system.inner.write();
+                locked.dispatcher.join();
+                promise.send(()).expect("shutdown failed");
+            });
+        }
     }
 
     pub(crate) fn dispatch<A>(&self, actor: ActorCellHandle<A>)

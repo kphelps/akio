@@ -49,7 +49,7 @@ struct ThreadHandle {
 impl ThreadHandle {
     pub fn join(self) {
         self.send(ThreadMessage::Stop());
-        self.handle.join().expect("Shutdown failed")
+        self.handle.join().expect("Shutdown failed");
     }
 
     pub fn send(&self, message: ThreadMessage) {
@@ -84,7 +84,7 @@ impl Dispatcher {
 
     pub fn join(&mut self) {
         let handles = ::std::mem::replace(&mut self.handles, Vec::new());
-        handles.into_iter().for_each(ThreadHandle::join)
+        handles.into_iter().for_each(ThreadHandle::join);
     }
 
     pub fn dispatch<T>(&self, actor: ActorCellHandle<T>)

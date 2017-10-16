@@ -92,6 +92,7 @@ impl ActorMessageMethod {
             impl MessageHandler<#message_name> for #actor_name {
                 type Response = #response_type;
 
+                #[allow(unused_variables)]
                 fn handle(&mut self, message: #message_name)
                     -> ActorResponse<Self::Response>
                 {
