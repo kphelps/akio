@@ -8,6 +8,7 @@ use futures::sync::mpsc;
 use num_cpus;
 use rand;
 use rand::Rng;
+use std::iter;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
@@ -119,7 +120,7 @@ impl Dispatcher {
     fn create_threads(&self, system: ActorSystem) -> Vec<ThreadHandle> {
         iter::repeat(())
             .take(num_cpus::get())
-            .map(|_| self.create_thread(system))
+            .map(|_| self.create_thread(system.clone()))
             .collect::<Vec<ThreadHandle>>()
     }
 

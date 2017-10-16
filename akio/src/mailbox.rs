@@ -1,7 +1,6 @@
 use super::{Actor, ActorResponse, MessageHandler};
 use futures::sync::oneshot;
 use std::collections::VecDeque;
-use std::marker::PhantomData;
 
 pub enum SystemMessage {
     Stop(oneshot::Sender<()>),

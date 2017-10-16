@@ -58,7 +58,7 @@ impl ClientState for ClientRxState {
     }
 
     fn id(&self) -> ClientId {
-        self.inner.id.clone()
+        self.inner.id
     }
 
     fn on_receive(&self, message: Self::Receive) -> ClientEvent {
@@ -76,7 +76,7 @@ impl ClientState for ClientRxState {
 
 impl ClientRxState {
     pub fn addr(&self) -> SocketAddr {
-        self.inner.addr.clone()
+        self.inner.addr
     }
 
     pub fn make_response_to_parts(id: u64, _result: Result<()>) -> rpc::Response {
@@ -137,7 +137,7 @@ impl ClientState for ClientTxState {
     }
 
     fn id(&self) -> ClientId {
-        self.inner.id.clone()
+        self.inner.id
     }
 
     fn on_receive(&self, message: Self::Receive) -> ClientEvent {
@@ -177,9 +177,8 @@ impl ClientTxState {
         payload: Option<rpc::Request_oneof_payload>,
     ) -> (u64, impl Future<Item = (), Error = ()>) {
         let request = Self::make_request_raw(payload);
-        let id = request.id.clone();
         (
-            id,
+            request.id,
             self.inner
                 .tx
                 .clone()

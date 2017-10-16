@@ -16,7 +16,6 @@ struct ExampleActor {
 // handler implementation and helpful methods on ActorRefs.
 #[actor_impl]
 impl ExampleActor {
-
     // We create a `new` constructor like any other struct.
     pub fn new() -> Self {
         Self {
@@ -52,13 +51,16 @@ pub fn main() {
         // We can call our #[actor_api] methods directly on the ActorRef.
         // The generated code returns a Future so we do not have to block
         // while we wait for a response.
-        let f = actor_ref.greet().and_then(move |message| {
-            println!("{}", message);
-            // We can also send a message without waiting for its response.
-            // We generate methods prefixed with `send_` for this case.
-            actor_ref.send_set_greeting("Good bye!".to_string());
-            actor_ref.greet()
-        }).map(|message| println!("{}", message));
+        let f = actor_ref
+            .greet()
+            .and_then(move |message| {
+                println!("{}", message);
+                // We can also send a message without waiting for its response.
+                // We generate methods prefixed with `send_` for this case.
+                actor_ref.send_set_greeting("Good bye!".to_string());
+                actor_ref.greet()
+            })
+            .map(|message| println!("{}", message));
 
         // There is also an actor-local context that allows us to execute
         // futures on the thread pool and access some context-specific data

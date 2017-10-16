@@ -8,7 +8,6 @@ extern crate akio_syntax;
 extern crate core_affinity;
 #[macro_use]
 extern crate error_chain;
-#[macro_use]
 extern crate futures;
 #[macro_use]
 extern crate lazy_static;

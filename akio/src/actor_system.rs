@@ -15,7 +15,6 @@ use futures::sync::oneshot;
 use parking_lot::RwLock;
 use std::boxed::FnBox;
 use std::sync::Arc;
-use std::time::Duration;
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -32,7 +31,7 @@ struct ActorSystemInner {
 
 impl ActorSystem {
     pub fn new() -> Self {
-        let mut dispatcher = Dispatcher::new();
+        let dispatcher = Dispatcher::new();
         let inner = ActorSystemInner {
             dispatcher: dispatcher,
             root_actor: None,

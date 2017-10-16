@@ -269,6 +269,7 @@ impl ActorImpl {
                 message_methods.push(ActorMessageMethod::new(item));
             } else if HookType::has_marker(&item) {
                 item.ident = syn::Ident::from(format!("_hook_{}", item.ident.as_ref()));
+
                 hook_methods
                     .entry(HookType::get(&item).unwrap())
                     .or_insert(Vec::new())

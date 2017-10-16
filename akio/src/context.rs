@@ -1,4 +1,4 @@
-use super::{ActorRef, ActorSystem};
+use super::ActorSystem;
 use futures::future::Future;
 use std::cell::RefCell;
 use tokio_core::reactor::Handle;

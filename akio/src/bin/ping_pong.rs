@@ -6,7 +6,7 @@ extern crate akio;
 use akio::prelude::*;
 use std::iter;
 
-struct PongActor {
+pub struct PongActor {
     ping: ActorRef<PingActor>,
 }
 
@@ -35,7 +35,7 @@ impl PongActor {
     }
 }
 
-struct PingActor {
+pub struct PingActor {
     pong: Option<ActorRef<PongActor>>,
 }
 

@@ -1,5 +1,5 @@
 use super::{context, create_actor, ActorRef};
-use futures::{future, Async, Future, IntoFuture, Poll};
+use futures::{Async, Future, IntoFuture, Poll};
 use uuid::Uuid;
 
 pub enum ActorResponse<T> {
@@ -25,18 +25,18 @@ pub trait MessageHandler<T> {
     fn handle(&mut self, message: T) -> ActorResponse<Self::Response>;
 }
 
-pub struct ActorContext<A> {
-    self_ref: ActorRef<A>,
-}
+//pub struct ActorContext<A> {
+//self_ref: ActorRef<A>,
+//}
 
-impl<A> ActorContext<A>
-where
-    A: Actor,
-{
-    pub fn id(&self) -> Uuid {
-        self.self_ref.id()
-    }
-}
+//impl<A> ActorContext<A>
+//where
+//A: Actor,
+//{
+//pub fn id(&self) -> Uuid {
+//self.self_ref.id()
+//}
+//}
 
 pub trait Actor: Sized + Send + 'static {
     fn handle_message<T>(

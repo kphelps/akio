@@ -20,7 +20,7 @@ pub(crate) fn start_server(
 ) -> Result<Server> {
     let listener = TcpListener::bind(listen_addr, in_handle)?;
     let handle = in_handle.clone();
-    let server_id = my_id.clone();
+    let server_id = my_id;
     let listener_stream = listener.incoming().map_err(|_| ()).for_each(
         move |(stream, _client_addr)| {
             initialize_rx_stream(my_id, stream, &handle, client_event_sender.clone()).map(|_| ())
@@ -29,6 +29,6 @@ pub(crate) fn start_server(
     in_handle.spawn(listener_stream);
     Ok(Server {
         id: server_id,
-        listen_addr: listen_addr.clone(),
+        listen_addr: *listen_addr,
     })
 }

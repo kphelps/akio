@@ -33,7 +33,7 @@ fn bind_client<C: ClientState, T: AsyncRead + AsyncWrite>(
 ) {
     let (raw_sender, raw_receiver) = bind_transport(io);
     let sender = raw_sender
-        .with(|message| serialize_message(message))
+        .with(|msg| serialize_message(&msg))
         .sink_map_err(|_| ());
     let receiver = raw_receiver.and_then(parse_message::<C::Receive>);
     (sender, receiver)
@@ -46,7 +46,7 @@ where
     Ok(protobuf::parse_from_carllerche_bytes::<T>(&bytes.freeze())?)
 }
 
-fn serialize_message<T>(message: T) -> Result<BytesMut>
+fn serialize_message<T>(message: &T) -> Result<BytesMut>
 where
     T: protobuf::MessageStatic,
 {
@@ -69,7 +69,7 @@ where
     let mut handshake = rpc::StartHandshake::new();
     handshake.set_client_id(client_id.as_bytes().as_ref().into());
     handshake.set_address(format!("{}", address.ip()).into());
-    handshake.set_port(address.port() as u32);
+    handshake.set_port(u32::from(address.port()));
     let payload = rpc::Request_oneof_payload::start_handshake(handshake);
     let request = ClientTxState::make_request(payload);
     sender
@@ -183,7 +183,7 @@ pub(crate) fn initialize_tx_stream(
     handle: Handle,
     client_event_sender: mpsc::Sender<ClientEvent>,
 ) -> impl Future<Item = ClientTxState, Error = ()> {
-    let listen_addr = listen_addr.clone();
+    let listen_addr = *listen_addr;
     let (sender, receiver) = bind_client::<ClientTxState, TcpStream>(stream);
     do_handshake(my_id, &listen_addr, sender, receiver).map(
         move |(client_id, sender2, receiver2)| {

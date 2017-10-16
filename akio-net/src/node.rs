@@ -7,7 +7,7 @@ use super::server::{start_server, Server};
 use futures::prelude::*;
 use futures::sync::{mpsc, oneshot};
 use parking_lot::Mutex;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -23,7 +23,7 @@ impl RemoteNode {
     pub fn new(handle: &Handle, listen_address: &SocketAddr) -> Result<Self> {
         let (client_event_sender, client_event_receiver) = mpsc::channel(100);
         let my_id = new_client_id();
-        let server = start_server(my_id, &handle, listen_address, client_event_sender.clone())?;
+        let server = start_server(my_id, handle, listen_address, client_event_sender.clone())?;
         info!("Listening on '{}'", listen_address);
         let inner = RemoteNodeInner::new(server, client_event_sender, handle);
         let node = RemoteNode {
@@ -65,7 +65,7 @@ impl RemoteNode {
     }
 
     fn start_hearbeat_task(&self) {
-        let clients = self.inner.clone();
+        let clients = Arc::clone(&self.inner);
         let ticker = tokio_timer::wheel()
             .build()
             .interval(Duration::from_secs(3))
@@ -185,7 +185,7 @@ impl RemoteNodeInner {
     }
 
     pub fn id(&self) -> ClientId {
-        self.server.id.clone()
+        self.server.id
     }
 
     pub fn connect_tx(&self, addr: &SocketAddr) {

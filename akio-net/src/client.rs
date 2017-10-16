@@ -8,13 +8,13 @@ use tokio_core::reactor::Handle;
 
 pub(crate) fn create_client(
     server_id: ClientId,
-    in_listener_addr: &SocketAddr,
+    listener_addr: &SocketAddr,
     in_handle: &Handle,
     target: &SocketAddr,
     client_event_sender: mpsc::Sender<ClientEvent>,
 ) {
     let handle = in_handle.clone();
-    let listener_addr = in_listener_addr.clone();
+    let listener_addr = *listener_addr;
     let client_stream = TcpStream::connect(target, in_handle)
         .map_err(|_| ())
         .and_then(move |stream| {

@@ -1,7 +1,5 @@
 use super::{
-    create_actor,
     Actor,
-    ActorRef,
     ActorResponse,
     ActorSystem,
     Mailbox,
@@ -10,10 +8,8 @@ use super::{
     SystemMessage,
 };
 use super::errors::*;
-use futures::prelude::*;
 use futures::sync::oneshot;
 use parking_lot::Mutex;
-use std::any::Any;
 use std::clone::Clone;
 use std::collections::VecDeque;
 use std::sync::{Arc, Weak};
@@ -23,26 +19,26 @@ use uuid::Uuid;
 pub enum ActorStatus {
     Idle,
     Scheduled,
-    Suspended,
+    //Suspended,
     Terminated,
 }
 
 impl ActorStatus {
-    pub fn is_scheduled(&self) -> bool {
-        *self == ActorStatus::Scheduled
-    }
+    //pub fn is_scheduled(&self) -> bool {
+    //*self == ActorStatus::Scheduled
+    //}
 
     pub fn is_idle(&self) -> bool {
         *self == ActorStatus::Idle
     }
 
-    pub fn is_suspended(&self) -> bool {
-        *self == ActorStatus::Suspended
-    }
+    //pub fn is_suspended(&self) -> bool {
+    //*self == ActorStatus::Suspended
+    //}
 
-    pub fn is_terminated(&self) -> bool {
-        *self == ActorStatus::Terminated
-    }
+    //pub fn is_terminated(&self) -> bool {
+    //*self == ActorStatus::Terminated
+    //}
 }
 
 pub(crate) struct ActorCellHandle<A> {
@@ -79,8 +75,7 @@ where
     }
 
     pub fn process_messages(&self, max_count: usize) -> usize {
-        let self_ref = ActorRef::new(self.clone());
-        self.with_cell_unwrapped(|cell| cell.process_messages(self_ref, max_count))
+        self.with_cell_unwrapped(|cell| cell.process_messages(max_count))
     }
 
     pub fn enqueue_message<M>(
@@ -155,7 +150,7 @@ where
         Arc::new(cell)
     }
 
-    pub fn process_messages(&self, self_ref: ActorRef<A>, max_count: usize) -> usize {
+    pub fn process_messages(&self, max_count: usize) -> usize {
         let message_batch = self.next_batch_to_process(max_count);
         let count = message_batch.len();
         message_batch
