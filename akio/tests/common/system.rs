@@ -12,12 +12,13 @@ where
     let system_clone = system.clone();
     let (sender, receiver) = oneshot::channel();
     system.on_startup(move || {
-        let fut = f(system_clone.clone()).map(|f_result| sender.send(f_result).ok().unwrap());
+        let fut = f(system_clone.clone())
+            .then(|f_result| Ok(sender.send(f_result).ok().unwrap()));
         context::execute(fut);
     });
     let result = receiver.wait();
     system.stop();
-    result.unwrap()
+    result.unwrap().unwrap()
 }
 
 pub fn with_actor_system<F, R>(f: F) -> R

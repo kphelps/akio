@@ -224,6 +224,7 @@ impl<A> ActorCell<A>
                 self.set_status(ActorStatus::Terminated);
                 self.actor.lock().on_stop();
                 let _ = self.system.deregister_actor::<A>(&self.id);
+                promise.send(()).expect("failed to stop");
             }
         }
     }

@@ -16,10 +16,12 @@ impl TestActor {
 impl TestActor {
     #[actor_api]
     pub fn test_method(&mut self) {
-        self.test_method_calls += 1
+        self.test_method_calls += 1;
+        self.done()
     }
 
-    pub fn get_test_method_calls(&mut self) {
-        self.reply(self.test_method_calls)
+    #[actor_api]
+    pub fn get_test_method_calls(&mut self) -> u64 {
+        self.respond(self.test_method_calls)
     }
 }

@@ -60,6 +60,6 @@ impl<A> ActorRef<A>
     pub fn stop(&self) -> impl Future<Item = (), Error = ()> {
         let (promise, future) = oneshot::channel();
         self.system_send(SystemMessage::Stop(promise));
-        future.map_err(|_| ())
+        future.map_err(|e| println!("Error when stopping: {:?}", e))
     }
 }
