@@ -1,7 +1,7 @@
 [package]
 name = "indexing"
 version = "0.1.0"
-authors = ["Kyle Phelps <kphelps@salsify.com>"]
+authors = ["Kyle Phelps <kylep91@gmail.com>"]
 
 [dependencies]
 akio = { path = "../../akio" }
