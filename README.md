@@ -1,5 +1,7 @@
 # Akio
 
+[![Build Status](https://travis-ci.org/kphelps/akio.svg?branch=master)](https://travis-ci.org/kphelps/akio)
+
 Akio takes heavy inspiration from the Erlang VM and other actor frameworks
 such as Akka and Orleans. The goal of this project is to take the ideals
 of these actor frameworks and apply them to rust, where we can have
