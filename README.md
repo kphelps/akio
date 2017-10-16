@@ -2,6 +2,13 @@
 
 [![Build Status](https://travis-ci.org/kphelps/akio.svg?branch=master)](https://travis-ci.org/kphelps/akio)
 
+Akio is a fast, highly concurrent, and easy to use framework for building
+distributed systems using the Actor Model.
+
+**[API Documentation](https://kphelps.github.io/akio/akio/index.html)**
+
+## Overview
+
 Akio takes heavy inspiration from the Erlang VM and other actor frameworks
 such as Akka and Orleans. The goal of this project is to take the ideals
 of these actor frameworks and apply them to rust, where we can have
@@ -12,8 +19,11 @@ in rust.
 
 ## Features
 
+Akio is an early stage project under active development.
+
 * [x] Local Actors
 * [x] Type-safe API
+* [ ] Supervision
 * [ ] Networked Actors
 * [ ] Clustering System
 * [ ] Persistence
@@ -28,6 +38,15 @@ language features to be stabilized:
 * `fnbox`
 
 ## Getting Started
+
+To start using `akio`, add it to your `Cargo.toml`:
+
+```
+[dependencies]
+akio = "0.1"
+```
+
+### Hello World
 
 Akio provides a few annotation-based macros to make working with actors very
 simple. We'll walk through an actor-based "Hello World" to explain the basics
