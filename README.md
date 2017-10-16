@@ -44,6 +44,7 @@ To start using `akio`, add it to your `Cargo.toml`:
 ```
 [dependencies]
 akio = "0.1"
+akio-syntax = "0.1"
 ```
 
 ### Hello World
