@@ -12,7 +12,7 @@ struct TelephoneActor {
 impl TelephoneActor {
     pub fn new() -> Self {
         Self {
-            children: Vec::new()
+            children: Vec::new(),
         }
     }
 

@@ -15,13 +15,11 @@ impl ActorMessageMethod {
     }
 
     fn message_name(&self, actor_name: &syn::Ident) -> syn::Ident {
-        syn::Ident::from(
-            format!(
-                "{}Message{}",
-                actor_name,
-                self.method_name().as_ref().to_pascal_case()
-            )
-        )
+        syn::Ident::from(format!(
+            "{}Message{}",
+            actor_name,
+            self.method_name().as_ref().to_pascal_case()
+        ))
     }
 
     fn method_name(&self) -> syn::Ident {
@@ -81,10 +79,7 @@ impl ActorMessageMethod {
         }
     }
 
-    pub fn handler_impl(
-        &self,
-        actor_name: syn::Ident,
-    ) -> quote::Tokens {
+    pub fn handler_impl(&self, actor_name: syn::Ident) -> quote::Tokens {
         let message_name = self.message_name(&actor_name);
         let response_type = self.inner_return_type();
         let message_unpackers = self.fields()
@@ -122,8 +117,7 @@ impl ActorMessageMethod {
 
     pub fn ref_method_signatures(&self) -> quote::Tokens {
         let method_name = self.method_name();
-        let send_method_name =
-            syn::Ident::from(format!("send_{}", method_name.as_ref()));
+        let send_method_name = syn::Ident::from(format!("send_{}", method_name.as_ref()));
         let return_type = self.future_return_type();
         let arg_names = &self.fields()
             .iter()
@@ -150,8 +144,7 @@ impl ActorMessageMethod {
 
     pub fn ref_methods(&self, actor_name: &syn::Ident) -> quote::Tokens {
         let method_name = self.method_name();
-        let send_method_name =
-            syn::Ident::from(format!("send_{}", method_name.as_ref()));
+        let send_method_name = syn::Ident::from(format!("send_{}", method_name.as_ref()));
         let return_type = self.future_return_type();
         let arg_names = &self.fields()
             .iter()
@@ -313,18 +306,14 @@ impl ActorImpl {
     fn ref_method_signatures(&self) -> Vec<quote::Tokens> {
         self.message_methods
             .iter()
-            .map(|message_method| {
-                message_method.ref_method_signatures()
-            })
+            .map(|message_method| message_method.ref_method_signatures())
             .collect()
     }
 
     fn ref_methods(&self) -> Vec<quote::Tokens> {
         self.message_methods
             .iter()
-            .map(|message_method| {
-                message_method.ref_methods(&self.name())
-            })
+            .map(|message_method| message_method.ref_methods(&self.name()))
             .collect()
     }
 

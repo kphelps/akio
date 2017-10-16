@@ -10,13 +10,11 @@ struct SkynetActor;
 #[actor_impl]
 impl SkynetActor {
     pub fn new() -> Self {
-        Self {
-        }
+        Self {}
     }
 
     #[actor_api]
-    pub fn poke(&mut self, n: u64) -> u64
-    {
+    pub fn poke(&mut self, n: u64) -> u64 {
         if n >= 100000 {
             self.respond(n)
         } else {

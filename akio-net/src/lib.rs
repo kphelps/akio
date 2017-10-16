@@ -3,12 +3,12 @@
 extern crate bytes;
 #[macro_use]
 extern crate error_chain;
-#[macro_use]
-extern crate log;
 extern crate futures;
 extern crate futures_cpupool;
-extern crate protobuf;
+#[macro_use]
+extern crate log;
 extern crate parking_lot;
+extern crate protobuf;
 extern crate rand;
 extern crate tokio_core;
 extern crate tokio_io;

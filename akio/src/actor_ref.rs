@@ -9,7 +9,8 @@ pub struct ActorRef<A> {
 }
 
 impl<A> Clone for ActorRef<A>
-    where A: Actor
+where
+    A: Actor,
 {
     fn clone(&self) -> Self {
         Self::new(self.cell.clone())
@@ -17,7 +18,8 @@ impl<A> Clone for ActorRef<A>
 }
 
 impl<A> ActorRef<A>
-    where A: Actor
+where
+    A: Actor,
 {
     pub(crate) fn new(cell: ActorCellHandle<A>) -> Self {
         Self {
@@ -33,13 +35,13 @@ impl<A> ActorRef<A>
         self.cell.id()
     }
 
-    pub fn request<T>(&self, message: T) ->
-        impl Future<
-            Item = ActorResponse<A::Response>,
-            Error = ()
-        >
-        where A: MessageHandler<T>,
-              T: Send + 'static
+    pub fn request<T>(
+        &self,
+        message: T,
+    ) -> impl Future<Item = ActorResponse<A::Response>, Error = ()>
+    where
+        A: MessageHandler<T>,
+        T: Send + 'static,
     {
         let (promise, future) = oneshot::channel();
         self.cell.enqueue_message(message, Some(promise));
@@ -47,8 +49,9 @@ impl<A> ActorRef<A>
     }
 
     pub fn send<T>(&self, message: T)
-        where A: MessageHandler<T>,
-              T: Send + 'static
+    where
+        A: MessageHandler<T>,
+        T: Send + 'static,
     {
         self.cell.enqueue_message(message, None);
     }

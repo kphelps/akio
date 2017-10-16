@@ -15,14 +15,13 @@ pub(crate) enum MailboxMessage<A> {
 pub(crate) struct UserMessageWrapper<A>(Box<UserMessage<A>>);
 
 impl<A> UserMessageWrapper<A>
-    where A: Actor
+where
+    A: Actor,
 {
-    pub fn make<M>(
-        message: M,
-        promise: Option<oneshot::Sender<ActorResponse<A::Response>>>,
-    ) -> Self
-        where M: Send + 'static,
-              A: MessageHandler<M>,
+    pub fn make<M>(message: M, promise: Option<oneshot::Sender<ActorResponse<A::Response>>>) -> Self
+    where
+        M: Send + 'static,
+        A: MessageHandler<M>,
     {
         UserMessageWrapper(Box::new(LocalUserMessage::new(message, promise)))
     }
@@ -37,19 +36,18 @@ trait UserMessage<A>: Send {
 }
 
 struct LocalUserMessage<A, M>
-    where A: MessageHandler<M>
+where
+    A: MessageHandler<M>,
 {
     message: Option<M>,
-    promise: Option<oneshot::Sender<ActorResponse<A::Response>>>
+    promise: Option<oneshot::Sender<ActorResponse<A::Response>>>,
 }
 
 impl<A, M> LocalUserMessage<A, M>
-    where A: MessageHandler<M>
+where
+    A: MessageHandler<M>,
 {
-    pub fn new(
-        message: M,
-        promise: Option<oneshot::Sender<ActorResponse<A::Response>>>
-    ) -> Self {
+    pub fn new(message: M, promise: Option<oneshot::Sender<ActorResponse<A::Response>>>) -> Self {
         Self {
             message: Some(message),
             promise: promise,
@@ -58,8 +56,9 @@ impl<A, M> LocalUserMessage<A, M>
 }
 
 impl<A, M> UserMessage<A> for LocalUserMessage<A, M>
-    where A: Actor + MessageHandler<M>,
-          M: Send
+where
+    A: Actor + MessageHandler<M>,
+    M: Send,
 {
     fn handle(&mut self, actor: &mut A) {
         if let Some(message) = self.message.take() {
@@ -74,7 +73,8 @@ pub(crate) struct Mailbox<A> {
 }
 
 impl<A> Mailbox<A>
-    where A: Actor
+where
+    A: Actor,
 {
     pub fn new() -> Self {
         Self {
@@ -90,11 +90,13 @@ impl<A> Mailbox<A>
         &mut self,
         message: M,
         promise: Option<oneshot::Sender<ActorResponse<A::Response>>>,
-    ) where A: MessageHandler<M>,
-            M: Send + 'static,
+    ) where
+        A: MessageHandler<M>,
+        M: Send + 'static,
     {
-        self.messages
-            .push_back(MailboxMessage::User(UserMessageWrapper::make(message, promise)))
+        self.messages.push_back(MailboxMessage::User(
+            UserMessageWrapper::make(message, promise),
+        ))
     }
 
     pub fn push_system_message(&mut self, system_message: SystemMessage) {

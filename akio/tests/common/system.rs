@@ -12,8 +12,7 @@ where
     let system_clone = system.clone();
     let (sender, receiver) = oneshot::channel();
     system.on_startup(move || {
-        let fut = f(system_clone.clone())
-            .then(|f_result| Ok(sender.send(f_result).ok().unwrap()));
+        let fut = f(system_clone.clone()).then(|f_result| Ok(sender.send(f_result).ok().unwrap()));
         context::execute(fut);
     });
     let result = receiver.wait();

@@ -22,9 +22,13 @@ fn test_create_stop_get_actor() {
     with_actor_system_async(|system| {
         let actor_ref = TestActor::new().start();
         let id = actor_ref.id();
-        actor_ref.clone().stop().map_err(|_| println!("Failed to stop")).map(move |_| {
-            assert!(system.get_actor::<TestActor>(&id).is_none());
-            assert!(!actor_ref.exists());
-        })
+        actor_ref
+            .clone()
+            .stop()
+            .map_err(|_| println!("Failed to stop"))
+            .map(move |_| {
+                assert!(system.get_actor::<TestActor>(&id).is_none());
+                assert!(!actor_ref.exists());
+            })
     })
 }

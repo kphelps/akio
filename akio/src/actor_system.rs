@@ -1,4 +1,13 @@
-use super::{Actor, ActorCell, ActorCellHandle, ActorContainer, ActorRef, ActorResponse, Dispatcher, MessageHandler};
+use super::{
+    Actor,
+    ActorCell,
+    ActorCellHandle,
+    ActorContainer,
+    ActorRef,
+    ActorResponse,
+    Dispatcher,
+    MessageHandler,
+};
 use super::actor_factory::create_actor;
 use super::errors::*;
 use parking_lot::RwLock;
@@ -30,8 +39,11 @@ impl ActorSystem {
             inner: Arc::new(RwLock::new(inner)),
         };
         system.inner.write().dispatcher.start(system.clone());
-        system.inner.write().root_actor =
-            Some(create_actor(system.clone(), Uuid::new_v4(), GuardianActor {}));
+        system.inner.write().root_actor = Some(create_actor(
+            system.clone(),
+            Uuid::new_v4(),
+            GuardianActor {},
+        ));
         system
     }
 
@@ -56,22 +68,24 @@ impl ActorSystem {
     }
 
     pub(crate) fn dispatch<A>(&self, actor: ActorCellHandle<A>)
-        where A: Actor
+    where
+        A: Actor,
     {
         self.inner.read().dispatch(actor);
     }
 
     pub(crate) fn register_actor<A>(&self, id: Uuid, actor: Arc<ActorCell<A>>)
-        where A: Actor
+    where
+        A: Actor,
     {
         if let Some(_) = self.inner.write().actors.insert(id.clone(), actor) {
             println!("Replacing existing actor?")
         }
     }
 
-    pub fn deregister_actor<A>(&self, id: &Uuid)
-        -> Result<()>
-        where A: Actor
+    pub fn deregister_actor<A>(&self, id: &Uuid) -> Result<()>
+    where
+        A: Actor,
     {
         self.inner
             .write()
@@ -82,7 +96,8 @@ impl ActorSystem {
     }
 
     pub fn get_actor<T>(&self, id: &Uuid) -> Option<ActorRef<T>>
-        where T: Actor
+    where
+        T: Actor,
     {
         self.inner
             .read()
@@ -94,7 +109,8 @@ impl ActorSystem {
 
 impl ActorSystemInner {
     fn dispatch<T>(&self, actor: ActorCellHandle<T>)
-        where T: Actor
+    where
+        T: Actor,
     {
         self.dispatcher.dispatch(actor)
     }
@@ -111,9 +127,7 @@ impl Actor for GuardianActor {}
 impl MessageHandler<GuardianMessage> for GuardianActor {
     type Response = ();
 
-    fn handle(&mut self, message: GuardianMessage)
-        -> ActorResponse<()>
-    {
+    fn handle(&mut self, message: GuardianMessage) -> ActorResponse<()> {
         match message {
             GuardianMessage::Execute(f) => f(),
         };

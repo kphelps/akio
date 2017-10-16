@@ -1,17 +1,17 @@
-use super::ipc::*;
-use super::rpc;
 use super::client::create_client;
 use super::client_state::*;
-use super::server::{start_server, Server};
 use super::errors::*;
+use super::ipc::*;
+use super::rpc;
+use super::server::{start_server, Server};
 use futures::prelude::*;
 use futures::sync::{mpsc, oneshot};
+use parking_lot::Mutex;
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
-use parking_lot::Mutex;
-use tokio_core::reactor::{Handle};
+use tokio_core::reactor::Handle;
 use tokio_timer;
 
 #[derive(Clone)]
@@ -25,11 +25,7 @@ impl RemoteNode {
         let my_id = new_client_id();
         let server = start_server(my_id, &handle, listen_address, client_event_sender.clone())?;
         info!("Listening on '{}'", listen_address);
-        let inner = RemoteNodeInner::new(
-            server,
-            client_event_sender,
-            handle
-        );
+        let inner = RemoteNodeInner::new(server, client_event_sender, handle);
         let node = RemoteNode {
             inner: Arc::new(inner),
         };
@@ -44,19 +40,27 @@ impl RemoteNode {
 
     fn start_event_handler(self, server_event_stream: mpsc::Receiver<ClientEvent>) {
         let handle = self.inner.handle.clone();
-        let event_handler_f = server_event_stream
-            .for_each(move |event| Ok(self.handle_server_event(event)));
+        let event_handler_f =
+            server_event_stream.for_each(move |event| Ok(self.handle_server_event(event)));
         handle.spawn(event_handler_f);
     }
 
     fn handle_server_event(&self, event: ClientEvent) {
         match event {
-            ClientEvent::RxConnected(client_id, state) => self.inner.client_rx_connected(client_id, state),
+            ClientEvent::RxConnected(client_id, state) => {
+                self.inner.client_rx_connected(client_id, state)
+            }
             ClientEvent::RxDisconnected(client_id) => self.inner.client_rx_disconnected(client_id),
-            ClientEvent::TxConnected(client_id, state) => self.inner.client_tx_connected(client_id, state),
+            ClientEvent::TxConnected(client_id, state) => {
+                self.inner.client_tx_connected(client_id, state)
+            }
             ClientEvent::TxDisconnected(client_id) => self.inner.client_tx_disconnected(client_id),
-            ClientEvent::RequestReceived(client_id, message) => self.inner.handle_request(client_id, message),
-            ClientEvent::ResponseReceived(client_id, message) => self.inner.handle_response(client_id, message),
+            ClientEvent::RequestReceived(client_id, message) => {
+                self.inner.handle_request(client_id, message)
+            }
+            ClientEvent::ResponseReceived(client_id, message) => {
+                self.inner.handle_response(client_id, message)
+            }
         }
     }
 
@@ -73,21 +77,21 @@ impl RemoteNode {
 
 enum ConnectionState<T> {
     Disconnected,
-    Connected(T)
+    Connected(T),
 }
 
 impl<T> ConnectionState<T> {
     pub fn is_disconnected(&self) -> bool {
         match *self {
             ConnectionState::Disconnected => true,
-            _ => false
+            _ => false,
         }
     }
 
     pub fn state(&self) -> Option<&T> {
         match *self {
             ConnectionState::Connected(ref inner) => Some(inner),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -123,15 +127,15 @@ impl RemoteConnection {
         }
     }
 
-    pub fn request(&mut self, payload: rpc::Request_oneof_payload)
-        -> Option<oneshot::Receiver<rpc::Response>>
-    {
-        self.request_oneway(payload)
-            .map(|id| {
-                let (promise, future) = oneshot::channel();
-                self.pending_requests.insert(id, promise);
-                future
-            })
+    pub fn request(
+        &mut self,
+        payload: rpc::Request_oneof_payload,
+    ) -> Option<oneshot::Receiver<rpc::Response>> {
+        self.request_oneway(payload).map(|id| {
+            let (promise, future) = oneshot::channel();
+            self.pending_requests.insert(id, promise);
+            future
+        })
     }
 
     pub fn request_oneway(&self, payload: rpc::Request_oneof_payload) -> Option<u64> {
@@ -143,7 +147,8 @@ impl RemoteConnection {
     }
 
     pub fn request_raw(&self, payload: Option<rpc::Request_oneof_payload>) -> Option<u64> {
-        self.tx.state()
+        self.tx
+            .state()
             .map(|client| client.request_raw(payload))
             .map(|(id, f)| {
                 self.handle.spawn(f);
@@ -152,11 +157,9 @@ impl RemoteConnection {
     }
 
     pub fn handle_response(&mut self, response: rpc::Response) {
-        let _ = self.pending_requests
-            .remove(&response.id)
-            .map(|promise| {
-                let _ = promise.send(response);
-            });
+        let _ = self.pending_requests.remove(&response.id).map(|promise| {
+            let _ = promise.send(response);
+        });
     }
 }
 
@@ -168,7 +171,11 @@ struct RemoteNodeInner {
 }
 
 impl RemoteNodeInner {
-    pub fn new(server: Server, client_event_sender: mpsc::Sender<ClientEvent>, handle: &Handle) -> Self {
+    pub fn new(
+        server: Server,
+        client_event_sender: mpsc::Sender<ClientEvent>,
+        handle: &Handle,
+    ) -> Self {
         Self {
             server: server,
             client_states: Mutex::new(HashMap::new()),
@@ -194,7 +201,9 @@ impl RemoteNodeInner {
     pub fn client_rx_connected(&self, client_id: ClientId, state: ClientRxState) {
         info!("[{}] rx connnected", client_id);
         let addr = state.addr();
-        self.with_client(client_id, |client| client.rx = ConnectionState::Connected(state));
+        self.with_client(client_id, |client| {
+            client.rx = ConnectionState::Connected(state)
+        });
         if self.with_client(client_id, |client| client.tx.is_disconnected()) {
             self.connect_tx(&addr);
         }
@@ -202,21 +211,30 @@ impl RemoteNodeInner {
 
     pub fn client_rx_disconnected(&self, client_id: ClientId) {
         info!("[{}] rx disconnnected", client_id);
-        self.with_client(client_id, |client| client.rx = ConnectionState::Disconnected)
+        self.with_client(
+            client_id,
+            |client| client.rx = ConnectionState::Disconnected,
+        )
     }
 
     pub fn client_tx_connected(&self, client_id: ClientId, state: ClientTxState) {
         info!("[{}] tx connnected", client_id);
-        self.with_client(client_id, |client| client.tx = ConnectionState::Connected(state));
+        self.with_client(client_id, |client| {
+            client.tx = ConnectionState::Connected(state)
+        });
     }
 
     pub fn client_tx_disconnected(&self, client_id: ClientId) {
         info!("[{}] tx disconnnected", client_id);
-        self.with_client(client_id, |client| client.tx = ConnectionState::Disconnected)
+        self.with_client(
+            client_id,
+            |client| client.tx = ConnectionState::Disconnected,
+        )
     }
 
     pub fn with_client<F, R>(&self, client_id: ClientId, f: F) -> R
-        where F: FnOnce(&mut RemoteConnection) -> R
+    where
+        F: FnOnce(&mut RemoteConnection) -> R,
     {
         let mut locked = self.client_states.lock();
         let mut client = locked
@@ -231,7 +249,7 @@ impl RemoteNodeInner {
         } else {
             debug!("[{}] received: {:?}", client_id, request);
             match request.payload.unwrap() {
-                _ => ()
+                _ => (),
             };
         }
     }

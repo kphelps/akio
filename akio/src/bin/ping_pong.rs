@@ -14,7 +14,7 @@ struct PongActor {
 impl PongActor {
     pub fn new(ping: ActorRef<PingActor>) -> Self {
         Self {
-            ping: ping
+            ping: ping,
         }
     }
 
@@ -36,7 +36,7 @@ impl PongActor {
 }
 
 struct PingActor {
-    pong: Option<ActorRef<PongActor>>
+    pong: Option<ActorRef<PongActor>>,
 }
 
 #[actor_impl]
@@ -76,9 +76,9 @@ fn spawn_ping_loop() {
     let ping = PingActor::new().start();
     let pong = PongActor::new(ping.clone()).start();
     ping.initialize(pong.clone());
-    iter::repeat(())
-        .take(20)
-        .for_each(|_| {pong.ping(); });
+    iter::repeat(()).take(20).for_each(|_| {
+        pong.ping();
+    });
 }
 
 pub fn main() {

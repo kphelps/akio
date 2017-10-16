@@ -17,7 +17,9 @@ pub fn set_thread_context(context: ThreadContext) {
 }
 
 pub fn maybe_handle() -> Option<Handle> {
-    CURRENT_THREAD.with(|ctx| ctx.borrow().as_ref().map(|inner| inner.handle.clone()))
+    CURRENT_THREAD.with(|ctx| {
+        ctx.borrow().as_ref().map(|inner| inner.handle.clone())
+    })
 }
 
 pub fn handle() -> Handle {

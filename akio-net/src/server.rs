@@ -16,23 +16,18 @@ pub(crate) fn start_server(
     my_id: ClientId,
     in_handle: &Handle,
     listen_addr: &SocketAddr,
-    client_event_sender: mpsc::Sender<ClientEvent>
+    client_event_sender: mpsc::Sender<ClientEvent>,
 ) -> Result<Server> {
     let listener = TcpListener::bind(listen_addr, in_handle)?;
     let handle = in_handle.clone();
     let server_id = my_id.clone();
-    let listener_stream = listener.incoming()
-        .map_err(|_| ())
-        .for_each(move |(stream, _client_addr)| {
-            initialize_rx_stream(
-                my_id,
-                stream,
-                &handle,
-                client_event_sender.clone()
-            ).map(|_| ())
-        });
+    let listener_stream = listener.incoming().map_err(|_| ()).for_each(
+        move |(stream, _client_addr)| {
+            initialize_rx_stream(my_id, stream, &handle, client_event_sender.clone()).map(|_| ())
+        },
+    );
     in_handle.spawn(listener_stream);
-    Ok(Server{
+    Ok(Server {
         id: server_id,
         listen_addr: listen_addr.clone(),
     })

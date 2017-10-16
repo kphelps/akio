@@ -12,7 +12,7 @@ use super::{
 use super::errors::*;
 use futures::prelude::*;
 use futures::sync::oneshot;
-use parking_lot::{Mutex};
+use parking_lot::Mutex;
 use std::any::Any;
 use std::clone::Clone;
 use std::collections::VecDeque;
@@ -52,7 +52,8 @@ pub(crate) struct ActorCellHandle<A> {
 }
 
 impl<A> Clone for ActorCellHandle<A>
-    where A: Actor
+where
+    A: Actor,
 {
     fn clone(&self) -> Self {
         Self::new(self.cell.clone())
@@ -60,7 +61,8 @@ impl<A> Clone for ActorCellHandle<A>
 }
 
 impl<A> ActorCellHandle<A>
-    where A: Actor
+where
+    A: Actor,
 {
     pub fn new(p_cell: Weak<ActorCell<A>>) -> Self {
         Self {
@@ -84,10 +86,10 @@ impl<A> ActorCellHandle<A>
     pub fn enqueue_message<M>(
         &self,
         message: M,
-        promise: Option<oneshot::Sender<ActorResponse<A::Response>>>
-    )
-        where A: MessageHandler<M>,
-              M: Send + 'static,
+        promise: Option<oneshot::Sender<ActorResponse<A::Response>>>,
+    ) where
+        A: MessageHandler<M>,
+        M: Send + 'static,
     {
         let me = self.clone();
         if let Err(e) = self.with_cell(|cell| cell.enqueue_message(me, message, promise)) {
@@ -138,10 +140,10 @@ pub(crate) struct ActorCell<A> {
 }
 
 impl<A> ActorCell<A>
-    where A: Actor
+where
+    A: Actor,
 {
-    pub fn new(system: ActorSystem, id: Uuid, actor: A) -> Arc<ActorCell<A>>
-    {
+    pub fn new(system: ActorSystem, id: Uuid, actor: A) -> Arc<ActorCell<A>> {
         let mailbox = Mutex::new(Mailbox::new());
         let cell = Self {
             id: id,
@@ -179,8 +181,9 @@ impl<A> ActorCell<A>
         me: ActorCellHandle<A>,
         message: M,
         promise: Option<oneshot::Sender<ActorResponse<A::Response>>>,
-    ) where A: MessageHandler<M>,
-            M: Send + 'static
+    ) where
+        A: MessageHandler<M>,
+        M: Send + 'static,
     {
         self.mailbox.lock().push(message, promise);
         self.dispatch(me);
@@ -208,12 +211,9 @@ impl<A> ActorCell<A>
         self.system.dispatch(cell);
     }
 
-    fn process_message(&self, message: MailboxMessage<A>)
-    {
+    fn process_message(&self, message: MailboxMessage<A>) {
         match message {
-            MailboxMessage::User(mut inner) => {
-                inner.handle(&mut self.actor.lock())
-            }
+            MailboxMessage::User(mut inner) => inner.handle(&mut self.actor.lock()),
             MailboxMessage::System(inner) => self.handle_system_message(inner),
         }
     }

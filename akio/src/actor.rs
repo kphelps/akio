@@ -1,21 +1,19 @@
-use super::{ActorRef, context, create_actor};
-use futures::{Async, IntoFuture, Future, future, Poll};
+use super::{context, create_actor, ActorRef};
+use futures::{future, Async, Future, IntoFuture, Poll};
 use uuid::Uuid;
 
 pub enum ActorResponse<T> {
     Normal(Option<T>),
-    Async(Box<Future<Item = T, Error = ()> + Send>)
+    Async(Box<Future<Item = T, Error = ()> + Send>),
 }
 
-impl<T> Future for ActorResponse<T>
-{
+impl<T> Future for ActorResponse<T> {
     type Item = T;
     type Error = ();
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match *self {
-            ActorResponse::Normal(ref mut value) =>
-                Ok(Async::Ready(value.take().unwrap())),
+            ActorResponse::Normal(ref mut value) => Ok(Async::Ready(value.take().unwrap())),
             ActorResponse::Async(ref mut f) => f.poll(),
         }
     }
@@ -32,7 +30,8 @@ pub struct ActorContext<A> {
 }
 
 impl<A> ActorContext<A>
-    where A: Actor
+where
+    A: Actor,
 {
     pub fn id(&self) -> Uuid {
         self.self_ref.id()
@@ -40,9 +39,12 @@ impl<A> ActorContext<A>
 }
 
 pub trait Actor: Sized + Send + 'static {
-    fn handle_message<T>(&mut self, message: T)
-        -> ActorResponse<<Self as MessageHandler<T>>::Response>
-        where Self: MessageHandler<T>
+    fn handle_message<T>(
+        &mut self,
+        message: T,
+    ) -> ActorResponse<<Self as MessageHandler<T>>::Response>
+    where
+        Self: MessageHandler<T>,
     {
         self.handle(message)
     }
@@ -64,8 +66,9 @@ pub trait Actor: Sized + Send + 'static {
     }
 
     fn respond_fut<F, T>(&self, v: F) -> ActorResponse<T>
-        where F: IntoFuture<Item = T, Error = ()> + 'static,
-              F::Future: Send
+    where
+        F: IntoFuture<Item = T, Error = ()> + 'static,
+        F::Future: Send,
     {
         ActorResponse::Async(Box::new(v.into_future()))
     }

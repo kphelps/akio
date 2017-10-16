@@ -35,7 +35,7 @@ struct ClientRxStateInner {
 
 #[derive(Clone, Debug)]
 pub(crate) struct ClientRxState {
-    inner: Rc<ClientRxStateInner>
+    inner: Rc<ClientRxStateInner>,
 }
 
 impl ClientState for ClientRxState {
@@ -47,11 +47,13 @@ impl ClientState for ClientRxState {
         let inner = ClientRxStateInner {
             // TODO unwrap is bad, don't be an idiot
             id: Uuid::from_bytes(&params.client_id).unwrap(),
-            addr: format!("{}:{}", params.address, params.port).parse().unwrap(),
+            addr: format!("{}:{}", params.address, params.port)
+                .parse()
+                .unwrap(),
             tx: tx,
         };
         Self {
-            inner: Rc::new(inner)
+            inner: Rc::new(inner),
         }
     }
 
@@ -98,7 +100,12 @@ impl ClientRxState {
 
     pub fn respond(&self, id: u64, result: Result<()>) -> impl Future<Item = (), Error = ()> {
         let response = Self::make_response_to_parts(id, result);
-        self.inner.tx.clone().send(response).map(|_| ()).map_err(|_| ())
+        self.inner
+            .tx
+            .clone()
+            .send(response)
+            .map(|_| ())
+            .map_err(|_| ())
     }
 }
 
@@ -111,7 +118,7 @@ struct ClientTxStateInner {
 
 #[derive(Clone, Debug)]
 pub(crate) struct ClientTxState {
-    inner: Rc<ClientTxStateInner>
+    inner: Rc<ClientTxStateInner>,
 }
 
 impl ClientState for ClientTxState {
@@ -125,7 +132,7 @@ impl ClientState for ClientTxState {
             tx: tx,
         };
         Self {
-            inner: Rc::new(inner)
+            inner: Rc::new(inner),
         }
     }
 
@@ -158,17 +165,27 @@ impl ClientTxState {
         request
     }
 
-    pub fn request(&self, payload: rpc::Request_oneof_payload)
-        -> (u64, impl Future<Item = (), Error = ()>)
-    {
+    pub fn request(
+        &self,
+        payload: rpc::Request_oneof_payload,
+    ) -> (u64, impl Future<Item = (), Error = ()>) {
         self.request_raw(Some(payload))
     }
 
-    pub fn request_raw(&self, payload: Option<rpc::Request_oneof_payload>)
-        -> (u64, impl Future<Item = (), Error = ()>)
-    {
+    pub fn request_raw(
+        &self,
+        payload: Option<rpc::Request_oneof_payload>,
+    ) -> (u64, impl Future<Item = (), Error = ()>) {
         let request = Self::make_request_raw(payload);
         let id = request.id.clone();
-        (id, self.inner.tx.clone().send(request).map(|_| ()).map_err(|_| ()))
+        (
+            id,
+            self.inner
+                .tx
+                .clone()
+                .send(request)
+                .map(|_| ())
+                .map_err(|_| ()),
+        )
     }
 }

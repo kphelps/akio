@@ -30,7 +30,8 @@ trait ActorProcessor: Send + 'static {
 }
 
 impl<T> ActorProcessor for ActorCellHandle<T>
-    where T: Actor + Send
+where
+    T: Actor + Send,
 {
     fn process(&self) -> usize {
         let n = self.process_messages(10);
@@ -87,7 +88,8 @@ impl Dispatcher {
     }
 
     pub fn dispatch<T>(&self, actor: ActorCellHandle<T>)
-        where T: Actor
+    where
+        T: Actor,
     {
         let thread_handle = self.next_thread();
         thread_handle.send(ThreadMessage::ProcessActor(Box::new(actor)));

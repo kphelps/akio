@@ -11,7 +11,7 @@ pub(crate) fn create_client(
     in_listener_addr: &SocketAddr,
     in_handle: &Handle,
     target: &SocketAddr,
-    client_event_sender: mpsc::Sender<ClientEvent>
+    client_event_sender: mpsc::Sender<ClientEvent>,
 ) {
     let handle = in_handle.clone();
     let listener_addr = in_listener_addr.clone();
@@ -23,8 +23,9 @@ pub(crate) fn create_client(
                 &listener_addr,
                 stream,
                 handle,
-                client_event_sender.clone()
+                client_event_sender.clone(),
             )
-        }).map(|_| ());
+        })
+        .map(|_| ());
     in_handle.spawn(client_stream);
 }
