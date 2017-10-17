@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["ActorResponse",""]],"mod":[["future","Futures"]],"struct":[["ActorRef",""],["ActorSystem",""],["Uuid","A Universally Unique Identifier (UUID)."]],"trait":[["Actor",""],["MessageHandler",""]]});
